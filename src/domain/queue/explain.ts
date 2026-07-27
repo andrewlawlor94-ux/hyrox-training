@@ -61,6 +61,18 @@ export function backdatedExplanation(name: string, movedName: string): string {
   return `${name} moved after your backdated ${movedName} was recorded.`
 }
 
+/** e.g. 'Important Long run session dropped because this week's essential
+ * session could not be placed.' Used when the priority-ladder guard holds a
+ * lower-priority session out of a week whose own essential session was
+ * already decided as dropped — see `weeksWithDroppedEssential` in
+ * `placement.ts`. Deliberately distinct from `droppedExplanation`'s generic
+ * "preserve recovery" copy: the cause here is the week's essential session,
+ * not this session's own eligibility search coming up empty. */
+export function priorityGuardDropExplanation(name: string, priority: Priority): string {
+  const label = priority.charAt(0).toUpperCase() + priority.slice(1)
+  return `${label} ${name} session dropped because this week's essential session could not be placed.`
+}
+
 /** e.g. 'The requested date for Strength B + stations could not be honoured
  * because another session already occupies it; it was placed automatically
  * instead.' Used when a pinned override collides with a day that is already
@@ -68,4 +80,14 @@ export function backdatedExplanation(name: string, movedName: string): string {
  * never double-books a date. */
 export function pinNotHonoredExplanation(name: string): string {
   return `The requested date for ${name} could not be honoured because another session already occupies it; it was placed automatically instead.`
+}
+
+/** Joins two already-punctuated sentences so the seam reads unambiguously as
+ * two sentences rather than a run-on — trims incidental whitespace at each
+ * end and inserts exactly one separating space. Used when prepending one
+ * causal explanation (e.g. why a pin was not honoured) to another (why the
+ * automated placement search landed where it did), so the combined copy
+ * never depends on the first sentence happening to already end cleanly. */
+export function joinSentences(first: string, second: string): string {
+  return `${first.trim()} ${second.trim()}`
 }

@@ -1,9 +1,9 @@
 import type { ISODate, Priority, RecoveryTag } from '@/domain/types'
-import { addDays, compareDates, daysBetween } from '@/domain/dates'
+import { addDays, compareDates } from '@/domain/dates'
 import type { OccupiedDay } from './eligibility'
 import { isDayEligible } from './eligibility'
-import { backdatedExplanation, deferredExplanation, droppedExplanation, movedExplanation, weekdayName } from './explain'
-import { AUTOMATED_PLACEMENT_WEEKDAYS_PER_WEEK, BUMP_PRIORITY_ORDER, DAYS_PER_WEEK } from './constants'
+import { backdatedExplanation, deferredExplanation, droppedExplanation, movedExplanation, priorityGuardDropExplanation, weekdayName } from './explain'
+import { AUTOMATED_PLACEMENT_WEEKDAYS_PER_WEEK, DAYS_PER_WEEK, PRIORITY_TIER_RANK } from './constants'
 
 /** A not-yet-terminal instance still needing a placement decision. */
 export interface OpenInstance {
@@ -75,80 +75,40 @@ function attemptFollowingWeek(inst: OpenInstance, occupied: OccupiedDay[], raceD
   return firstEligibleDay(days, inst.recoveryTags, occupied, raceDate)
 }
 
-/** True when `date` falls within plan week `weekNumber`'s calendar span
- * (Monday through Sunday), regardless of which template's own week that
- * date's session nominally belongs to — this is what lets an instance that
- * spilled over from an earlier week's escalation (`attemptFollowingWeek`)
- * still count as occupying *this* week's calendar space. */
-function isDateInWeek(date: ISODate, weekNumber: number, planStartDate: ISODate): boolean {
-  const monday = addDays(planStartDate, (weekNumber - 1) * DAYS_PER_WEEK)
-  const offset = daysBetween(monday, date)
-  return offset >= 0 && offset < DAYS_PER_WEEK
-}
-
-/** Frees up room in `weekNumber`'s calendar span for a still-unplaced
- * `essential` deferring into it, by shedding that week's own lowest-priority
- * session (optional before important, per `BUMP_PRIORITY_ORDER`). Mutates
- * `occupied` and `placements` in place. Returns whether a session was
- * actually shed.
- *
- * A candidate qualifies two ways: (1) it already holds a day that falls
- * within `weekNumber`'s calendar span — whether that's its own native week
- * or a day it reached by spilling over from an earlier week's escalation —
- * in which case that day is freed from `occupied`; or (2) it is native to
- * `weekNumber` and has not been decided at all yet, in which case it is
- * marked dropped *before* it ever gets a turn, rather than only being
- * eligible once it has already (by luck of processing order) claimed a day.
- * That second branch is what closes Finding 2b's gap: since the outer loop
- * processes weeks in ascending order, `weekNumber`'s own templates are
- * ordinarily still undecided when an earlier week's essential reaches this
- * point, so restricting the search to already-placed instances would let an
- * undecided lower-priority session go on to place successfully later —
- * exactly the invariant the priority ladder exists to prevent. A candidate
- * already decided as dropped offers nothing further and is skipped. The
- * `placements.has` guard in the main loop below is what stops a
- * preemptively-dropped candidate from being silently re-decided (and
- * potentially placed) once the outer loop reaches its own turn. */
-function bumpLowestPriorityInWeek(
-  weekNumber: number,
-  openInstances: OpenInstance[],
-  placements: Map<string, PlacementOutcome>,
-  occupied: OccupiedDay[],
-  planStartDate: ISODate,
-): boolean {
-  for (const priority of BUMP_PRIORITY_ORDER) {
-    const candidate = openInstances.find((i) => {
-      if (i.priority !== priority) return false
-      const placed = placements.get(i.templateId)
-      if (placed === undefined) return i.weekNumber === weekNumber
-      if (placed.scheduledDate === null) return false
-      return isDateInWeek(placed.scheduledDate, weekNumber, planStartDate)
-    })
-    if (candidate === undefined) continue
-
-    const placed = placements.get(candidate.templateId)
-    const scheduledDate = placed?.scheduledDate ?? null
-    if (scheduledDate !== null) {
-      const idx = occupied.findIndex((o) => o.date === scheduledDate)
-      if (idx !== -1) occupied.splice(idx, 1)
-    }
-    placements.set(candidate.templateId, {
-      scheduledDate: null,
-      explanation: droppedExplanation(candidate.name, candidate.priority, 'make room for an essential session in the following week'),
-      dropped: { templateId: candidate.templateId, priority: candidate.priority, reason: 'Made room for an essential session in the following week.' },
-    })
-    return true
-  }
-  return false
+/**
+ * A total order over open instances: `essential` before `important` before
+ * `optional` (`PRIORITY_TIER_RANK`), then the existing `(weekNumber,
+ * sequenceInWeek)` ordering within a tier, then `templateId` as a final,
+ * data-derived tiebreaker so the result can never depend on input array
+ * position. Placing strictly by tier — every essential decided, in full,
+ * before any important is even attempted, and every important before any
+ * optional — is what makes the priority-ladder invariant (an essential is
+ * never `autoDropped` while a lower-priority same-week peer holds a
+ * scheduled date) hold structurally rather than through a reactive,
+ * after-the-fact correction: a lower-priority instance is simply never
+ * *decided* while a higher-priority one still has an undecided fate.
+ */
+function byPriorityTier(a: OpenInstance, b: OpenInstance): number {
+  const rankDiff = PRIORITY_TIER_RANK[a.priority] - PRIORITY_TIER_RANK[b.priority]
+  if (rankDiff !== 0) return rankDiff
+  if (a.weekNumber !== b.weekNumber) return a.weekNumber - b.weekNumber
+  if (a.sequenceInWeek !== b.sequenceInWeek) return a.sequenceInWeek - b.sequenceInWeek
+  if (a.templateId === b.templateId) return 0
+  return a.templateId < b.templateId ? -1 : 1
 }
 
 /**
- * Places every open (non-frozen, non-pinned) instance in the order given —
- * callers must pass instances already sorted by (weekNumber,
- * sequenceInWeek), which is what makes the "no double-workout catch-up"
- * behaviour fall out naturally: each instance claims a day before the next
- * one is even considered, so two open instances can never race for the same
- * date regardless of how far behind the plan is.
+ * Places every open (non-frozen, non-pinned) instance, re-sorted internally
+ * by `byPriorityTier` regardless of the order `openInstances` arrives in —
+ * every essential is decided before any important is attempted, and every
+ * important before any optional, which is what makes the priority-ladder
+ * invariant hold by construction (see `byPriorityTier`) rather than through
+ * a reactive "bump a lower-priority session" correction. Within a tier, the
+ * existing `(weekNumber, sequenceInWeek)` order is what makes the
+ * "no double-workout catch-up" behaviour fall out naturally: each instance
+ * claims a day before the next one *in its tier* is even considered, so two
+ * open instances of the same priority can never race for the same date
+ * regardless of how far behind the plan is.
  *
  * `initialOccupied` (frozen instances plus pinned overrides) is copied, not
  * mutated, and grows by one entry each time an instance is placed.
@@ -162,6 +122,22 @@ export function placeOpenInstances(
 ): Map<string, PlacementOutcome> {
   const occupied: OccupiedDay[] = initialOccupied.map((o) => ({ ...o, tags: [...o.tags] }))
   const placements = new Map<string, PlacementOutcome>()
+  const sorted = [...openInstances].sort(byPriorityTier)
+
+  // Populated only with `weekNumber`s whose essential(s) were fully decided
+  // and still dropped. Because every essential is processed (in full,
+  // including its following-week escalation) before any important/optional
+  // is even attempted, this set is complete by the time the first
+  // lower-priority instance is considered — no lower-priority instance native
+  // to one of these weeks may hold a scheduled date afterward, whether from
+  // its own week or an escalation, or the invariant the priority ladder
+  // exists to guarantee would be broken exactly as Finding A describes: a
+  // lower-priority peer succeeding (via its own week *or* an escalation into
+  // the essential's target week) while its same-week essential sits dropped.
+  // This is a plain fact check against an already-final decision, not a
+  // reactive search for a candidate to un-decide — the essential's own
+  // outcome is never revisited.
+  const weeksWithDroppedEssential = new Set<number>()
 
   const place = (inst: OpenInstance, day: ISODate): void => {
     occupied.push({ date: day, tags: [...inst.recoveryTags] })
@@ -181,20 +157,25 @@ export function placeOpenInstances(
     placements.set(inst.templateId, { scheduledDate: day, explanation, dropped: null })
   }
 
-  const drop = (inst: OpenInstance): void => {
+  const drop = (inst: OpenInstance, guarded: boolean): void => {
+    const explanation = guarded
+      ? priorityGuardDropExplanation(inst.name, inst.priority)
+      : droppedExplanation(inst.name, inst.priority, 'preserve recovery')
+    const reason = guarded
+      ? 'This week\'s essential session could not be placed, so lower-priority sessions in the same week are not scheduled either.'
+      : 'No eligible day remained for this session before the plan needed to move on.'
     placements.set(inst.templateId, {
       scheduledDate: null,
-      explanation: droppedExplanation(inst.name, inst.priority, 'preserve recovery'),
-      dropped: { templateId: inst.templateId, priority: inst.priority, reason: 'No eligible day remained for this session before the plan needed to move on.' },
+      explanation,
+      dropped: { templateId: inst.templateId, priority: inst.priority, reason },
     })
   }
 
-  for (const inst of openInstances) {
-    // Already decided — either a previous essential's bump preemptively
-    // dropped this instance before its own turn (Finding 2b), or (in
-    // principle) something else already resolved it. Re-processing it here
-    // would silently overwrite that earlier, deliberate decision.
-    if (placements.has(inst.templateId)) continue
+  for (const inst of sorted) {
+    if (inst.priority !== 'essential' && weeksWithDroppedEssential.has(inst.weekNumber)) {
+      drop(inst, true)
+      continue
+    }
 
     const ownWeek = attemptOwnWeek(inst, occupied, today, raceDate, planStartDate)
     if (ownWeek !== null) {
@@ -203,7 +184,7 @@ export function placeOpenInstances(
     }
 
     if (inst.priority === 'optional') {
-      drop(inst)
+      drop(inst, false)
       continue
     }
 
@@ -213,22 +194,8 @@ export function placeOpenInstances(
       continue
     }
 
-    if (inst.priority === 'important') {
-      drop(inst)
-      continue
-    }
-
-    // essential: shed the *following* week's lowest-priority session (the
-    // week it is actually deferring into, not its own) and retry once.
-    const freedRoom = bumpLowestPriorityInWeek(inst.weekNumber + 1, openInstances, placements, occupied, planStartDate)
-    const retryDay = freedRoom
-      ? attemptOwnWeek(inst, occupied, today, raceDate, planStartDate) ?? attemptFollowingWeek(inst, occupied, raceDate, planStartDate)
-      : null
-    if (retryDay !== null) {
-      place(inst, retryDay)
-    } else {
-      drop(inst)
-    }
+    drop(inst, false)
+    if (inst.priority === 'essential') weeksWithDroppedEssential.add(inst.weekNumber)
   }
 
   return placements

@@ -1,12 +1,44 @@
 import { describe, expect, it } from 'vitest'
-import { recomputeQueue } from '../recompute'
-import type { QueueTemplate } from '../recompute'
+import { recomputeQueue as recomputeQueueImpl } from '../recompute'
+import type { QueueInput, QueueResult, QueueTemplate } from '../recompute'
 import { event, fillerSession, input, PLAN_START, weekTemplates } from './recompute.fixtures'
+
+// Every `QueueResult` produced anywhere in this file is recorded here, purely
+// by wrapping the real `recomputeQueue` under the same name — every existing
+// call site below is unchanged and transparently contributes a result. The
+// "priority ladder invariant holds across every scenario in this file"
+// describe block at the end of the file sweeps this array, which is what
+// makes that sweep genuinely file-wide rather than scoped to one fixture
+// (Finding A, requirement 2) without needing to touch every individual test.
+const allResults: QueueResult[] = []
+function recomputeQueue(queueInput: QueueInput): QueueResult {
+  const result = recomputeQueueImpl(queueInput)
+  allResults.push(result)
+  return result
+}
 
 function byId(result: ReturnType<typeof recomputeQueue>, templateId: string) {
   const found = result.instances.find((i) => i.templateId === templateId)
   if (!found) throw new Error(`No instance ${templateId}`)
   return found
+}
+
+/** The priority-ladder invariant (Finding A): within one native `weekNumber`,
+ * an `essential` session must never be `autoDropped` while a lower-priority
+ * peer of that same `weekNumber` holds a non-null `scheduledDate`. Terminal
+ * statuses (`completed`/`partiallyCompleted`/`skipped`) are historical fact —
+ * already-recorded outcomes, not results of the placement competition — so
+ * they are excluded from "surviving lower-priority" on that basis, matching
+ * the exclusion already used ad hoc in this file before this sweep existed. */
+function assertPriorityLadderInvariant(r: QueueResult): void {
+  const terminal = new Set(['completed', 'partiallyCompleted', 'skipped'])
+  const byWeek = new Map<number, QueueResult['instances']>()
+  for (const i of r.instances) byWeek.set(i.weekNumber, [...(byWeek.get(i.weekNumber) ?? []), i])
+  for (const weekInstances of byWeek.values()) {
+    const droppedEssential = weekInstances.some((i) => i.priority === 'essential' && i.status === 'autoDropped')
+    const survivingLowerPriority = weekInstances.some((i) => i.priority !== 'essential' && !terminal.has(i.status) && i.scheduledDate !== null)
+    expect(droppedEssential && survivingLowerPriority).toBe(false)
+  }
 }
 
 describe('baseline materialization', () => {
@@ -271,8 +303,19 @@ describe('backdated completion (COMPLETE_EARLIER)', () => {
     // broken (Finding 5b). Pin the exact date, and confirm it actually
     // differs from what the same fixture yields without the COMPLETE_EARLIER
     // event, so the assertion is coupled to backdating specifically.
+    //
+    // Expected date updated for priority-tier placement (Finding A, fix pass
+    // 2): essentials (w1s1, w1s4, w1s5 — w1s2 is terminal here) now all claim
+    // week 1's remaining days *before* the optional (w1s3) or important
+    // (w1s6) session gets a turn, so w1s5 (Strength B, essential) finds room
+    // in its own week on Friday 2026-08-07 instead of needing to escalate to
+    // week 2's Monday. Under the previous (week, sequence)-only ordering,
+    // w1s3 and w1s6 would have already claimed earlier days by the time
+    // w1s5's turn came, forcing the escalation to 2026-08-10 — that was an
+    // artifact of processing order, not a genuine shortfall, so landing in
+    // week 1 is the more correct outcome, not a regression.
     const strengthB = byId(r, 'w1s5')
-    expect(strengthB.scheduledDate).toBe('2026-08-10')
+    expect(strengthB.scheduledDate).toBe('2026-08-07')
     const withoutBackdate = recomputeQueue(input({ today: '2026-08-06', events: [] }))
     expect(byId(withoutBackdate, 'w1s5').scheduledDate).not.toBe(strengthB.scheduledDate)
   })
@@ -430,6 +473,32 @@ describe('pinned overrides never double-book a day (Finding 1)', () => {
     expect(byId(r, 'w1s2').scheduledDate).not.toBe('2026-08-04')
     expect(byId(r, 'w1s2').adjustmentReason).toMatch(/could not be honoured/i)
   })
+
+  it('reports isManualOverride: false for a rejected pin, true for the honoured one (Finding B)', () => {
+    // Same collision fixture as the first test in this block: w1s2's pin
+    // (later createdAt) wins and actually takes effect, so its schedule
+    // genuinely reflects a manual override. w1s1's pin is rejected — its
+    // template falls through to ordinary automated placement, so nothing
+    // about its final schedule was manually overridden, even though a MOVE
+    // event exists in its history. `isManualOverride` must track whether the
+    // override actually took effect, not merely whether a MOVE event was ever
+    // recorded (`replay.ts`'s `applyEvents` sets the flag unconditionally on
+    // any MOVE, which is what previously went stale here).
+    const events = [
+      event('MOVE', 'w1s1', '2026-08-03T09:00:00.000Z', { toDate: '2026-08-05' }),
+      event('MOVE', 'w1s2', '2026-08-03T09:00:00.000Z', { toDate: '2026-08-05' }),
+    ]
+    const overrides = [
+      { id: 'ov1', instanceId: 'w1s1', date: '2026-08-05', isPinned: true, createdAt: '2026-08-03T09:00:00.000Z' },
+      { id: 'ov2', instanceId: 'w1s2', date: '2026-08-05', isPinned: true, createdAt: '2026-08-03T10:00:00.000Z' },
+    ]
+    const r = recomputeQueue(input({ today: '2026-08-03', events, overrides }))
+
+    expect(byId(r, 'w1s2').scheduledDate).toBe('2026-08-05')
+    expect(byId(r, 'w1s2').isManualOverride).toBe(true)
+    expect(byId(r, 'w1s1').scheduledDate).not.toBe('2026-08-05')
+    expect(byId(r, 'w1s1').isManualOverride).toBe(false)
+  })
 })
 
 describe('race date anchoring', () => {
@@ -479,15 +548,20 @@ describe('race date anchoring', () => {
   })
 })
 
-describe('essential bump fallback: third-tier escalation (Finding 2)', () => {
-  it('places the essential by shedding the following week\'s lower-priority spillover', () => {
+describe('priority-tier placement resolves essential/lower-priority contention (Finding 2, re-verified under Finding A)', () => {
+  it('places the essential ahead of a same-week important contending for the same escalation day', () => {
     // Week 1 is entirely occupied by frozen fillers, so both `imp1`
-    // (important) and `ess1` (essential, processed after imp1) fail their
-    // own week outright and must escalate into week 2. Week 2 has Wed-Sat
-    // frozen, leaving only Mon/Tue naturally reachable. imp1 (processed
-    // first) claims Monday; that leaves Tuesday hard-conflict-blocked for
-    // ess1 (adjacent hardRun/hardRun) and nothing else free — ess1 cannot
-    // place in its own week or week 2's free days until imp1 yields.
+    // (important) and `ess1` (essential) fail their own week outright and
+    // must escalate into week 2. Week 2 has Wed-Sat frozen, leaving only
+    // Mon/Tue naturally reachable. Under priority-tier placement, ess1 (the
+    // whole essential tier is decided before any important is even
+    // attempted) claims Monday outright — no bump is needed, since imp1 has
+    // not been placed yet when ess1's turn comes. imp1 is then blocked from
+    // Monday (taken) and from Tuesday (hard conflict: adjacent hardRun),
+    // so it exhausts both weeks and drops. This is the same net outcome the
+    // old reactive bump produced for this particular shape, but reached
+    // structurally (by processing order) rather than by un-deciding a
+    // previously-placed session.
     const w1Fillers = [
       fillerSession('f1', 1, 1, '2026-08-03'),
       fillerSession('f2', 1, 2, '2026-08-04'),
@@ -517,16 +591,20 @@ describe('essential bump fallback: third-tier escalation (Finding 2)', () => {
     const text = r.explanations.map((e) => e.text).join(' | ')
     expect(text).toMatch(/Important spillover/)
     expect(text).toMatch(/Essential target/)
+    assertPriorityLadderInvariant(r)
   })
 
-  it('never leaves an essential autoDropped while a lower-priority session in the same week is scheduled', () => {
-    // Same shape as above, but nothing is already occupying week 2 besides
-    // frozen fillers — the only lower-priority candidate is `opt2`, native
-    // to week 2 and not yet processed at all when `ess2`'s bump runs
-    // (Finding 2b's exact blind spot). A broken implementation that only
-    // considered already-placed candidates would find nothing to bump, drop
-    // ess2 immediately, and then let opt2 place normally later — this
-    // asserts that never happens, for every week in the result.
+  it('drops a same-week lower-priority peer too, when the essential cannot be rescued at all', () => {
+    // Same overall shape, but week 2's only free day (Saturday 2026-08-15) is
+    // hard-blocked for the essential specifically (adjacent hardRun filler on
+    // the Friday before it) — no reordering can place a `hardRun`-tagged
+    // session there, so ess2 drops regardless of algorithm. `opt2` is native
+    // to week 2 (a *different* native week from ess2's week 1), so it is not
+    // gated by ess2's drop at all and schedules normally on its own week's
+    // free day (2026-08-15) — the priority ladder invariant is scoped to
+    // *same weekNumber* peers (asserted below), and correctly does not
+    // require sacrificing an unrelated week's optional for an essential in a
+    // different native week that it never actually contended with.
     const w1Fillers = [
       fillerSession('h1', 1, 1, '2026-08-03'),
       fillerSession('h2', 1, 2, '2026-08-04'),
@@ -551,24 +629,67 @@ describe('essential bump fallback: third-tier escalation (Finding 2)', () => {
 
     const r = recomputeQueue(input({ templates, events, today: '2026-08-03', raceDate: '2027-01-16' }))
 
-    // ess2 genuinely cannot be rescued here (no already-occupied day in week
-    // 2 is freeable for it), so it drops — but opt2 must not be left
-    // standing as the session that displaced it.
     expect(byId(r, 'ess2').status).toBe('autoDropped')
-    expect(byId(r, 'opt2').scheduledDate).toBeNull()
+    // opt2's own native week (2) has no dropped essential of its own, so it
+    // is placed normally — see comment above for why this is correct, not a
+    // priority-ladder violation.
+    expect(byId(r, 'opt2').scheduledDate).toBe('2026-08-15')
+    assertPriorityLadderInvariant(r)
+  })
 
-    // Terminal statuses (completed/partiallyCompleted/skipped) are historical
-    // fact, not outcomes of the priority-ladder competition — the fillers
-    // used to build this dense scenario are excluded on that basis, leaving
-    // only instances that actually went through placement.
-    const terminal = new Set(['completed', 'partiallyCompleted', 'skipped'])
-    const byWeek = new Map<number, typeof r.instances>()
-    for (const i of r.instances) byWeek.set(i.weekNumber, [...(byWeek.get(i.weekNumber) ?? []), i])
-    for (const weekInstances of byWeek.values()) {
-      const droppedEssential = weekInstances.some((i) => i.priority === 'essential' && i.status === 'autoDropped')
-      const survivingLowerPriority = weekInstances.some((i) => i.priority !== 'essential' && !terminal.has(i.status) && i.scheduledDate !== null)
-      expect(droppedEssential && survivingLowerPriority).toBe(false)
+  it('never leaves an essential autoDropped while a same-native-week lower-priority peer is scheduled (Finding A counterexample)', () => {
+    // The exact shape from Finding A's brief: week 1 fully frozen; week 2
+    // Mon-Fri frozen with `lowerBodyStrength` (Saturday free); an essential
+    // (`ess3`, hardRun) and a lower-priority important (`imp3`, longRun) both
+    // *native to week 1*, the important later in sequence. ess3 fails its
+    // own week (full) and week 2's only free day, 2026-08-15, is hard-blocked
+    // for it (adjacent lowerBodyStrength -> hardRun) — no placement order can
+    // rescue it, since this is a tag conflict, not day contention. imp3 has
+    // no such conflict (no lowerBodyStrength -> longRun row) and *would*
+    // otherwise place at 2026-08-15 — exactly the violation Finding A
+    // describes (imp3, native to ess3's own week, ends up scheduled while
+    // ess3 sits dropped). Priority-tier placement's same-native-week guard
+    // (`weeksWithDroppedEssential` in `placement.ts`) is what stops this:
+    // once ess3's tier-processing turn is fully decided (dropped), imp3 —
+    // native to the same week — is never given the chance to place, even via
+    // its own escalation, and drops too.
+    const w1Fillers = [
+      fillerSession('k1', 1, 1, '2026-08-03'),
+      fillerSession('k2', 1, 2, '2026-08-04'),
+      fillerSession('k3', 1, 3, '2026-08-05'),
+      fillerSession('k4', 1, 4, '2026-08-06'),
+      fillerSession('k5', 1, 5, '2026-08-07'),
+      fillerSession('k6', 1, 6, '2026-08-08'),
+    ]
+    const w2Fillers = [
+      fillerSession('m1', 2, 1, '2026-08-10', ['lowerBodyStrength']),
+      fillerSession('m2', 2, 2, '2026-08-11', ['lowerBodyStrength']),
+      fillerSession('m3', 2, 3, '2026-08-12', ['lowerBodyStrength']),
+      fillerSession('m4', 2, 4, '2026-08-13', ['lowerBodyStrength']),
+      fillerSession('m5', 2, 5, '2026-08-14', ['lowerBodyStrength']),
+    ]
+    const ess3: QueueTemplate = { templateId: 'ess3', weekNumber: 1, sessionSlot: 1, sequenceInWeek: 10, priority: 'essential', recoveryTags: ['hardRun'], name: 'Essential 3' }
+    const imp3: QueueTemplate = { templateId: 'imp3', weekNumber: 1, sessionSlot: 2, sequenceInWeek: 11, priority: 'important', recoveryTags: ['longRun'], name: 'Important 3' }
+
+    const fillers = [...w1Fillers, ...w2Fillers]
+    const templates = [...fillers.map((f) => f.template), ess3, imp3]
+    const events = fillers.map((f) => f.occupyingEvent)
+
+    const r = recomputeQueue(input({ templates, events, today: '2026-08-03', raceDate: '2027-01-16' }))
+
+    const essential = byId(r, 'ess3')
+    const important = byId(r, 'imp3')
+    // The invariant, not a specific outcome: either the essential succeeds,
+    // or — since it cannot here — the lower-priority peer must not be left
+    // scheduled either. (ess3 is, in fact, physically unplaceable in this
+    // exact fixture: 2026-08-15 hard-blocks `hardRun` regardless of ordering,
+    // so the second branch is the one that actually fires.)
+    if (essential.status === 'autoDropped') {
+      expect(important.scheduledDate).toBeNull()
+    } else {
+      expect(essential.scheduledDate).not.toBeNull()
     }
+    assertPriorityLadderInvariant(r)
   })
 })
 
@@ -610,5 +731,16 @@ describe('determinism and purity', () => {
     const snapshot = structuredClone(i)
     recomputeQueue(i)
     expect(i).toEqual(snapshot)
+  })
+})
+
+describe('priority ladder invariant holds across every scenario in this file (Finding A, requirement 2)', () => {
+  it('never coexists an autoDropped essential with a scheduled lower-priority peer of the same weekNumber, in any recorded result', () => {
+    // `allResults` is populated by the `recomputeQueue` wrapper at the top of
+    // this file, which every call site above (unchanged) transparently feeds
+    // — this is a genuine file-wide sweep, not scoped to one fixture, and it
+    // runs last (declaration order) so every scenario above has already run.
+    expect(allResults.length).toBeGreaterThan(0)
+    for (const r of allResults) assertPriorityLadderInvariant(r)
   })
 })

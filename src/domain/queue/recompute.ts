@@ -6,7 +6,7 @@ import type { OpenInstance } from './placement'
 import { placeOpenInstances } from './placement'
 import { DAYS_PER_WEEK, SLOT_DAY_OFFSET } from './constants'
 import { activePin, pinSoftConflicts } from './pins'
-import { pinNotHonoredExplanation } from './explain'
+import { joinSentences, pinNotHonoredExplanation } from './explain'
 import type { InstanceState } from './replay'
 import { applyEvents, effectiveEvents, EVENT_TERMINAL_STATUSES, sortEvents } from './replay'
 
@@ -206,7 +206,7 @@ export function recomputeQueue(input: QueueInput): QueueResult {
     const rejectedPinReason = rejectedPinReasons.get(t.templateId) ?? null
     const adjustmentReason = rejectedPinReason !== null
       ? (placement?.explanation !== null && placement?.explanation !== undefined
-        ? `${rejectedPinReason} ${placement.explanation}`
+        ? joinSentences(rejectedPinReason, placement.explanation)
         : rejectedPinReason)
       : (placement?.explanation ?? null)
     instances.push({
@@ -214,7 +214,14 @@ export function recomputeQueue(input: QueueInput): QueueResult {
       scheduledDate: placement?.scheduledDate ?? null,
       status: isDropped ? 'autoDropped' : state.status,
       completedForDate: null,
-      isManualOverride: state.isManualOverride,
+      // A rejected pin never took effect — its template fell through to
+      // ordinary automated placement — so `isManualOverride` must not report
+      // `true` here even though `state.isManualOverride` is set unconditionally
+      // by any MOVE event in the history. Only `rejectedPinReason === null`
+      // (no rejection recorded for this instance) lets the event-derived flag
+      // through; a rejected pin always reports `false`, matching what the
+      // schedule actually reflects.
+      isManualOverride: rejectedPinReason === null && state.isManualOverride,
       adjustmentReason,
       softConflicts: [],
     })

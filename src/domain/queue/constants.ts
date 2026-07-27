@@ -1,3 +1,5 @@
+import type { Priority } from '@/domain/types'
+
 /** Four sessions is the minimum effective week (§15). */
 export const MIN_EFFECTIVE_WEEK_SESSIONS = 4
 /** Six sessions is the ideal week; five and six are additional productive volume. */
@@ -40,7 +42,14 @@ export const DAYS_PER_WEEK = 7
  */
 export const AUTOMATED_PLACEMENT_WEEKDAYS_PER_WEEK = 6
 
-/** Priority resolution order when an essential session must bump a
- * lower-priority session to make room within its own week (§15): optional
- * sessions give way before important ones. */
-export const BUMP_PRIORITY_ORDER: readonly ('optional' | 'important')[] = ['optional', 'important']
+/**
+ * The priority-tier processing order for placement (§15): "Essential
+ * sessions move first. Important sessions move second. Optional sessions are
+ * dropped first when insufficient days remain." Every instance of a lower
+ * rank is decided only after every instance of every higher rank has already
+ * been decided, which is what makes the priority-ladder invariant (an
+ * essential is never dropped while a lower-priority same-week peer is
+ * scheduled) hold structurally rather than through a reactive correction —
+ * see `byPriorityTier` in `placement.ts`.
+ */
+export const PRIORITY_TIER_RANK: Record<Priority, number> = { essential: 0, important: 1, optional: 2 }
