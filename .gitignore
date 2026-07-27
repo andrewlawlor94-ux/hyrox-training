@@ -13,6 +13,7 @@ Thumbs.db
 .env.*
 !.env.example
 dev-dist/
+*.tsbuildinfo
 
 # SDD controller scratch
 .superpowers/
