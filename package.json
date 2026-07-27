@@ -13,7 +13,9 @@
     "test": "vitest",
     "test:run": "vitest run",
     "e2e": "playwright test",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "postinstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/postinstall-junction.ps1",
+    "fix-junction": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-windows.ps1"
   },
   "dependencies": {
     "dexie": "^4.0.11",

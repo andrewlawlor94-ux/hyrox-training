@@ -25,19 +25,33 @@ export default tseslint.config(
   },
   {
     // Purity guard: the domain layer must stay pure and clock-free.
-    files: ['src/domain/**/*.ts'],
+    // Covers .ts AND .tsx: a domain file containing JSX would necessarily be
+    // .tsx, and that's exactly the "domain must not depend on React" shape
+    // this guard exists to catch.
+    files: ['src/domain/**/*.ts', 'src/domain/**/*.tsx'],
     ignores: ['src/domain/**/__tests__/**'],
     rules: {
       'no-restricted-imports': ['error', {
         patterns: [
           { group: ['react', 'react-dom', 'dexie', 'dexie-react-hooks'], message: 'Domain layer must not depend on React or Dexie.' },
-          { group: ['@/data/*', '@/features/*', '@/components/*', '@/hooks/*'], message: 'Domain layer may only import from @/domain and @/data/types.' },
+          // '**' added alongside the bare form ('@/data') so a barrel import
+          // with no trailing path segment (e.g. `from '@/data'`) is also
+          // caught, not just `@/data/<something>`. Verified empirically:
+          // ESLint's no-restricted-imports `group` patterns are matched via
+          // the `ignore` package (git's ignore semantics), where matching a
+          // path segment cascades to everything nested under it — so
+          // '@/data/*' already caught deep imports like
+          // '@/data/repositories/workoutRepo' despite the single star. The
+          // real gap it left open was the bare directory form.
+          { group: ['@/data', '@/data/**', '@/features', '@/features/**', '@/components', '@/components/**', '@/hooks', '@/hooks/**'], message: 'Domain layer may only import from @/domain and @/data/types.' },
         ],
       }],
       'no-restricted-syntax': ['error',
         { selector: "CallExpression[callee.object.name='Date'][callee.property.name='now']", message: 'Domain must receive `today` as a parameter, not read the clock.' },
+        { selector: "CallExpression[callee.object.name='Date'][callee.computed=true][callee.property.value='now']", message: 'Domain must receive `today` as a parameter, not read the clock.' },
         { selector: "NewExpression[callee.name='Date'][arguments.length=0]", message: 'Domain must receive `today` as a parameter, not read the clock.' },
         { selector: "CallExpression[callee.object.name='Math'][callee.property.name='random']", message: 'Domain must stay deterministic.' },
+        { selector: "CallExpression[callee.object.name='Math'][callee.computed=true][callee.property.value='random']", message: 'Domain must stay deterministic.' },
       ],
     },
   },

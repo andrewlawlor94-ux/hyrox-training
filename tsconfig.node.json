@@ -1,4 +1,15 @@
 {
+  // Not referenced from tsconfig.json's "references" array (yet): its
+  // `include` below matches zero files until a later task creates
+  // scripts/generate-icons.mjs or playwright.config.ts. TypeScript hard-errors
+  // (TS18003) on a referenced project with zero matched inputs, which would
+  // break `npm run typecheck`/`npm run build` (both run `tsc -b`) today.
+  //
+  // This omission is enforced, not just noted: src/__tests__/projectConfig.test.ts
+  // asserts that once either of those files exists on disk, tsconfig.json's
+  // "references" array must include { "path": "./tsconfig.node.json" }. That
+  // test is vacuously true right now and starts failing the moment Task 30 or
+  // 32 lands, so restoring the reference here is not optional to remember.
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2023"],

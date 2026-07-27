@@ -9,7 +9,7 @@ function walk(dir: string): string[] {
     if (statSync(full).isDirectory()) {
       if (entry === '__tests__') continue
       out.push(...walk(full))
-    } else if (entry.endsWith('.ts')) {
+    } else if (entry.endsWith('.ts') || entry.endsWith('.tsx')) {
       out.push(full)
     }
   }
