@@ -26,8 +26,15 @@ export function hasUrgentRedFlag(answers: RedFlagAnswers): boolean {
 /**
  * Safety-prompt copy shown when `hasUrgentRedFlag` is true. Deliberately
  * names no condition and makes no diagnosis — it only tells the athlete what
- * to do right now: stop training and get seen in person, today.
+ * to do right now.
+ *
+ * For this specific combination of answers (new bowel/bladder dysfunction,
+ * saddle numbness, or significant progressive weakness), same-day emergency
+ * assessment is the appropriate steer — not one option alongside a routine
+ * doctor's visit. The copy makes that the unambiguous recommendation and
+ * explicitly tells the athlete not to wait for a routine appointment, so it
+ * cannot be read as "book a GP visit whenever is convenient."
  */
 export function urgentRedFlagMessage(): string {
-  return 'Stop training now. Based on your answers, please seek urgent in-person medical assessment today — contact a doctor, urgent care, or emergency services rather than continuing your workout. This is a safety prompt to get you seen quickly, not a judgment about what is causing your symptoms.'
+  return 'Stop training now. This combination of symptoms needs same-day medical attention — go to an emergency department or urgent care centre, or call emergency services, today. Please do not wait for a routine doctor\'s appointment. This is a safety prompt to get you seen quickly, not a diagnosis or a judgment about what is causing your symptoms.'
 }

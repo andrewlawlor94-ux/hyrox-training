@@ -44,7 +44,7 @@ const CONTENT: Record<SubstitutionKind, { title: string; detail: string }> = {
   },
   stopAggravatingExercise: {
     title: 'Stop the aggravating exercise',
-    detail: 'For sciatic pain that is worsening, radiating, or comes with weakness or numbness, stop whatever exercise aggravates it and seek clinical assessment rather than pushing through.',
+    detail: 'Your sciatic pain score is high enough to treat as elevated. Stop whatever exercise aggravates it and seek clinical assessment rather than pushing through — and if you also notice it radiating, or any weakness or numbness, mention that when you are assessed.',
   },
 }
 
@@ -69,9 +69,12 @@ function buildForStream(stream: SymptomStream, streamState: StreamState): Substi
 
   if (streamState.persistenceFlag) kinds.push('seekAssessment')
 
-  // Worsening, radiating sciatic pain, weakness, or numbness: stop the
-  // aggravating exercise and seek clinical assessment. Sciatic-specific —
-  // shin pain never triggers stopping an exercise outright.
+  // Elevated sciatic pain (reported score 5+): stop the aggravating exercise
+  // and seek clinical assessment. This fires purely off the reported score —
+  // the app captures no data about radiation, weakness, or numbness, so the
+  // copy must not claim to have observed those signs (it may only invite the
+  // athlete to consider them). Sciatic-specific — shin pain never triggers
+  // stopping an exercise outright.
   if (stream === 'sciatic' && streamState.level === 'elevated') {
     kinds.push('stopAggravatingExercise', 'seekAssessment')
   }

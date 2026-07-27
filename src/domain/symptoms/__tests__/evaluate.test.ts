@@ -62,6 +62,17 @@ describe('spike flag (D13)', () => {
     expect(evaluateSymptoms(logs, TODAY).shin.spikeFlag).toBe(false)
   })
 
+  it('flags exactly at the two-point boundary (>=, not >)', () => {
+    // baseline over logs 2..6 = mean(1,1,1,1,1) = 1; latest 3 -> delta exactly 2
+    const logs = [
+      log('2026-08-31', 3, 0), log('2026-08-29', 1, 0), log('2026-08-27', 1, 0),
+      log('2026-08-25', 1, 0), log('2026-08-23', 1, 0), log('2026-08-21', 1, 0),
+    ]
+    const s = evaluateSymptoms(logs, TODAY)
+    expect(s.shin.baseline).toBeCloseTo(1, 6)
+    expect(s.shin.spikeFlag).toBe(true)
+  })
+
   it('does not flag without the minimum baseline samples', () => {
     const logs = [log('2026-08-31', 5, 0), log('2026-08-29', 0, 0)]
     const s = evaluateSymptoms(logs, TODAY)
@@ -116,8 +127,28 @@ describe('series and windowing', () => {
   })
 
   it('still uses only in-window logs for flags', () => {
-    const logs = [log('2026-08-31', 2, 1), log('2026-01-05', 9, 9)]
-    expect(evaluateSymptoms(logs, TODAY, 90).shin.spikeFlag).toBe(false)
+    // Guards against filtering the chart series but forgetting to filter the
+    // logs that feed the flag computation. The previous fixture used only 2
+    // logs total (1 in-window + 1 stale), so baselineSamples.length was 1
+    // either way -- baseline was null and no spike could ever fire, whether
+    // or not windowing was applied to flags. That could not catch the bug it
+    // was meant to guard against.
+    //
+    // This fixture has 3 in-window baseline logs (enough on their own to
+    // clear SYMPTOM_BASELINE_MIN_SAMPLES) plus one very stale, high-value
+    // log. Correctly windowed: baseline = mean(1,1,1) = 1, delta = 5-1 = 4,
+    // so spikeFlag fires. If the stale log leaked into the baseline pool
+    // (i.e. flags computed from unwindowed logs): baseline = mean(1,1,1,10)
+    // = 3.25, delta = 1.75, and the flag would NOT fire. The two behaviors
+    // genuinely diverge, so this fixture proves windowing is applied before
+    // flag computation, not just before charting.
+    const logs = [
+      log('2026-08-31', 5, 0), log('2026-08-29', 1, 0), log('2026-08-27', 1, 0),
+      log('2026-08-25', 1, 0), log('2026-01-05', 10, 0),
+    ]
+    const s = evaluateSymptoms(logs, TODAY, 90)
+    expect(s.shin.baseline).toBeCloseTo(1, 6)
+    expect(s.shin.spikeFlag).toBe(true)
   })
 })
 

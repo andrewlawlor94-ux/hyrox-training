@@ -61,6 +61,17 @@ describe('suggestSubstitutions', () => {
     const keys = s.map((x) => `${x.stream}:${x.kind}`)
     expect(new Set(keys).size).toBe(keys.length)
   })
+
+  it('dedupes seekAssessment for sciatic when both the persistence rule and the elevated rule fire', () => {
+    // shin can never hit a duplicate kind through the current single-pass
+    // if-block structure, so a shin-only fixture (as above) would pass even
+    // with the Set deleted. The dedupe is only load-bearing for sciatic,
+    // where seekAssessment is reachable via two independent rules at once:
+    // persistenceFlag and level === 'elevated'.
+    const kinds = suggestSubstitutions(state({}, { latest: 7, level: 'elevated', persistenceFlag: true }))
+      .filter((s) => s.stream === 'sciatic' && s.kind === 'seekAssessment')
+    expect(kinds).toHaveLength(1)
+  })
 })
 
 describe('red flags', () => {
@@ -81,6 +92,16 @@ describe('red flags', () => {
   it('directs the athlete to urgent assessment without diagnosing', () => {
     const msg = urgentRedFlagMessage()
     expect(msg).toMatch(/urgent/i)
-    expect(msg).not.toMatch(/diagnos(is|e)\b(?! )/i)
+    // Positive: carries explicit non-diagnostic framing.
+    expect(msg).toMatch(/not a (medical )?diagnosis|safety prompt|not a judgment/i)
+    // Negative: names no specific clinical condition.
+    expect(msg).not.toMatch(/cauda equina|sciatica|herniat|stenosis|disc|nerve (damage|compression)|fracture/i)
+  })
+
+  it('makes same-day emergency assessment the unambiguous recommendation, not one option among several', () => {
+    const msg = urgentRedFlagMessage()
+    expect(msg).toMatch(/emergency/i)
+    expect(msg).toMatch(/same-day|today/i)
+    expect(msg).toMatch(/do not wait|rather than waiting|not wait/i)
   })
 })
