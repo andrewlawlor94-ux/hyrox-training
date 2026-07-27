@@ -1,4 +1,4 @@
-import type { ScheduleEvent, ScheduleEventType } from '@/domain/types'
+import type { ISODate, RecoveryTag, ScheduleEvent, ScheduleEventType } from '@/domain/types'
 import type { QueueInput, QueueTemplate } from '../recompute'
 
 export const PLAN_START = '2026-08-03' // a Monday
@@ -27,5 +27,20 @@ export function input(over: Partial<QueueInput> = {}): QueueInput {
     planStartDate: PLAN_START, raceDate: RACE_DATE,
     templates: weekTemplates(1), events: [], overrides: [], today: PLAN_START,
     ...over,
+  }
+}
+
+/** A template that is immediately completed on its own `forDate`, purely to
+ * occupy that calendar day as a dense, inert wall for building multi-week
+ * shortfall scenarios (used by the essential-bump fallback tests) without
+ * depending on any other session's own placement. Tags default to a type
+ * with no recovery-matrix rows so it doesn't accidentally introduce a
+ * conflict unless the caller asks for one. */
+export function fillerSession(
+  id: string, weekNumber: number, slot: number, forDate: ISODate, tags: RecoveryTag[] = ['recovery'],
+): { template: QueueTemplate; occupyingEvent: ScheduleEvent } {
+  return {
+    template: { templateId: id, weekNumber, sessionSlot: slot, sequenceInWeek: slot - 1, priority: 'optional', recoveryTags: tags, name: `Filler ${id}` },
+    occupyingEvent: event('COMPLETE', id, `${forDate}T18:00:00.000Z`, { forDate }),
   }
 }

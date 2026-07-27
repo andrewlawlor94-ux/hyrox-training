@@ -2,12 +2,16 @@ import type { ScheduleOverride } from '@/domain/types'
 import type { EligibilityResult } from './eligibility'
 
 /** The override that currently pins `templateId`, if any — the most
- * recently created pinned override wins when more than one exists. */
+ * recently created pinned override wins when more than one exists. Ties on
+ * `createdAt` are broken by `id` (greatest wins) so the result can never
+ * depend on `overrides` array order. */
 export function activePin(overrides: ScheduleOverride[], templateId: string): ScheduleOverride | null {
   let best: ScheduleOverride | null = null
   for (const o of overrides) {
     if (o.instanceId !== templateId || !o.isPinned) continue
-    if (best === null || o.createdAt > best.createdAt) best = o
+    if (best === null) { best = o; continue }
+    if (o.createdAt > best.createdAt) { best = o; continue }
+    if (o.createdAt === best.createdAt && o.id > best.id) best = o
   }
   return best
 }

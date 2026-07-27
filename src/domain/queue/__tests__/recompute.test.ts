@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { recomputeQueue } from '../recompute'
 import type { QueueTemplate } from '../recompute'
-import { event, input, PLAN_START, weekTemplates } from './recompute.fixtures'
+import { event, fillerSession, input, PLAN_START, weekTemplates } from './recompute.fixtures'
 
 function byId(result: ReturnType<typeof recomputeQueue>, templateId: string) {
   const found = result.instances.find((i) => i.templateId === templateId)
@@ -22,7 +22,19 @@ describe('baseline materialization', () => {
   })
 
   it('leaves Sunday free', () => {
-    expect(r.instances.map((i) => i.scheduledDate)).not.toContain('2026-08-09')
+    // Vacuous on its own: with `today === planStartDate` and exactly one
+    // template per weekday slot, nothing here would ever need Sunday
+    // regardless of whether Sunday-exclusion exists at all (Finding 5c). A
+    // dense multi-week catch-up scenario is what actually exercises it — if
+    // an off-by-one ever shifted the automated-placement window to include
+    // Sunday, some instance in this scenario would land there.
+    const dense = recomputeQueue(input({
+      templates: [...weekTemplates(1), ...weekTemplates(2), ...weekTemplates(3)], today: '2026-08-17',
+    }))
+    const isSunday = (date: string): boolean => new Date(`${date}T00:00:00.000Z`).getUTCDay() === 0
+    const scheduled = dense.instances.map((i) => i.scheduledDate).filter((d): d is string => d !== null)
+    expect(scheduled.length).toBeGreaterThan(0)
+    expect(scheduled.some(isSunday)).toBe(false)
   })
 
   it('schedules every instance on its planned date when nothing has happened', () => {
@@ -253,8 +265,16 @@ describe('backdated completion (COMPLETE_EARLIER)', () => {
   })
 
   it('returns future recommendations to their correct positions', () => {
+    // `strengthB.scheduledDate! >= today` is true for *any* successfully
+    // placed instance (`attemptOwnWeek` computes `from = laterOf(today,
+    // plannedDate)`), so it passes even if backdating logic is entirely
+    // broken (Finding 5b). Pin the exact date, and confirm it actually
+    // differs from what the same fixture yields without the COMPLETE_EARLIER
+    // event, so the assertion is coupled to backdating specifically.
     const strengthB = byId(r, 'w1s5')
-    expect(strengthB.scheduledDate! >= '2026-08-06').toBe(true)
+    expect(strengthB.scheduledDate).toBe('2026-08-10')
+    const withoutBackdate = recomputeQueue(input({ today: '2026-08-06', events: [] }))
+    expect(byId(withoutBackdate, 'w1s5').scheduledDate).not.toBe(strengthB.scheduledDate)
   })
 
   it('duplicates nothing', () => {
@@ -263,6 +283,25 @@ describe('backdated completion (COMPLETE_EARLIER)', () => {
 
   it('is idempotent — recomputing yields the identical result', () => {
     expect(recomputeQueue(input({ today: '2026-08-06', events }))).toEqual(r)
+  })
+})
+
+describe('backdated completion displaces another session (Finding 4)', () => {
+  it('attributes the displacement to the backdated completion, not "was missed"', () => {
+    // w1s1 (Strength A + sled) is backdated-completed onto 2026-08-04 —
+    // which is w1s2's (Easy run) own planned date — so w1s2 must move. The
+    // true cause is the backdated completion, not "Tuesday was missed",
+    // which was the false causal claim `backdatedExplanation` exists to fix.
+    const events = [event('COMPLETE_EARLIER', 'w1s1', '2026-08-05T18:00:00.000Z', { forDate: '2026-08-04' })]
+    const r = recomputeQueue(input({ today: '2026-08-05', events }))
+
+    expect(byId(r, 'w1s2').scheduledDate).not.toBe('2026-08-04')
+    expect(byId(r, 'w1s2').adjustmentReason).toBe('Easy run + durability moved after your backdated Strength A + sled was recorded.')
+    // Only w1s2's own reason is under test here — other sessions in this
+    // scenario are displaced for unrelated, genuinely-missed reasons, and
+    // legitimately keep "was missed" phrasing; it's specifically w1s2's
+    // causal attribution that must not misstate the backdate as a miss.
+    expect(byId(r, 'w1s2').adjustmentReason).not.toMatch(/was missed/i)
   })
 })
 
@@ -313,12 +352,83 @@ describe('manual override', () => {
   })
 
   it('allows a manual move that violates a hard conflict but records it as a soft conflict note', () => {
+    // w1s1 (Strength A + sled: lowerBodyStrength + highImpactStation) is
+    // completed in place on 2026-08-03, so it is genuinely occupying the day
+    // before w1s4's pinned target — lowerBodyStrength -> hardRun the next
+    // day is a hard conflict in the matrix. Without freezing a neighbour
+    // like this, the pin's soft-conflict evaluation (`buildOccupiedAndPins`)
+    // runs before any *ordinary*, not-yet-placed instance has claimed a day,
+    // so it would see an empty occupied set and (wrongly, for purposes of
+    // this test) report no conflict at all — this fixture exercises the
+    // real, documented code path instead.
     const r = recomputeQueue(input({
       today: '2026-08-03',
-      events: [event('MOVE', 'w1s4', '2026-08-03T09:00:00.000Z', { toDate: '2026-08-04' })],
+      events: [
+        event('COMPLETE', 'w1s1', '2026-08-03T08:00:00.000Z', { forDate: '2026-08-03' }),
+        event('MOVE', 'w1s4', '2026-08-03T09:00:00.000Z', { toDate: '2026-08-04' }),
+      ],
       overrides: [{ id: 'ov2', instanceId: 'w1s4', date: '2026-08-04', isPinned: true, createdAt: '2026-08-03T09:00:00.000Z' }],
     }))
     expect(byId(r, 'w1s4').scheduledDate).toBe('2026-08-04')
+    const conflicts = byId(r, 'w1s4').softConflicts
+    expect(conflicts.length).toBeGreaterThan(0)
+    expect(conflicts.some((c) => /recovery/i.test(c))).toBe(true)
+  })
+})
+
+describe('pinned overrides never double-book a day (Finding 1)', () => {
+  it('honours only one of two pins that target the same date', () => {
+    const events = [
+      event('MOVE', 'w1s1', '2026-08-03T09:00:00.000Z', { toDate: '2026-08-05' }),
+      event('MOVE', 'w1s2', '2026-08-03T09:00:00.000Z', { toDate: '2026-08-05' }),
+    ]
+    const overrides = [
+      { id: 'ov1', instanceId: 'w1s1', date: '2026-08-05', isPinned: true, createdAt: '2026-08-03T09:00:00.000Z' },
+      { id: 'ov2', instanceId: 'w1s2', date: '2026-08-05', isPinned: true, createdAt: '2026-08-03T10:00:00.000Z' },
+    ]
+    const r = recomputeQueue(input({ today: '2026-08-03', events, overrides }))
+
+    // Never two instances on the same date, regardless of which pin wins.
+    const onTarget = r.instances.filter((i) => i.scheduledDate === '2026-08-05')
+    expect(onTarget).toHaveLength(1)
+
+    // The more recently created pin (w1s2, later createdAt) wins; the loser
+    // (w1s1) falls through to ordinary automated placement instead of being
+    // silently dropped or double-booked.
+    expect(byId(r, 'w1s2').scheduledDate).toBe('2026-08-05')
+    expect(byId(r, 'w1s2').isManualOverride).toBe(true)
+    expect(byId(r, 'w1s1').scheduledDate).not.toBe('2026-08-05')
+    expect(byId(r, 'w1s1').scheduledDate).not.toBeNull()
+    expect(byId(r, 'w1s1').adjustmentReason).toMatch(/could not be honoured/i)
+  })
+
+  it('resolves the collision the same way regardless of overrides/events array order', () => {
+    const events = [
+      event('MOVE', 'w1s1', '2026-08-03T09:00:00.000Z', { toDate: '2026-08-05' }),
+      event('MOVE', 'w1s2', '2026-08-03T09:00:00.000Z', { toDate: '2026-08-05' }),
+    ]
+    const overrides = [
+      { id: 'ov1', instanceId: 'w1s1', date: '2026-08-05', isPinned: true, createdAt: '2026-08-03T09:00:00.000Z' },
+      { id: 'ov2', instanceId: 'w1s2', date: '2026-08-05', isPinned: true, createdAt: '2026-08-03T10:00:00.000Z' },
+    ]
+    const forward = recomputeQueue(input({ today: '2026-08-03', events, overrides }))
+    const reversed = recomputeQueue(input({ today: '2026-08-03', events: [...events].reverse(), overrides: [...overrides].reverse() }))
+    expect(reversed).toEqual(forward)
+  })
+
+  it('does not honour a pin onto a date a completed instance already occupies', () => {
+    const events = [
+      event('COMPLETE', 'w1s1', '2026-08-03T18:00:00.000Z', { forDate: '2026-08-04' }),
+      event('MOVE', 'w1s2', '2026-08-03T09:00:00.000Z', { toDate: '2026-08-04' }),
+    ]
+    const overrides = [{ id: 'ov1', instanceId: 'w1s2', date: '2026-08-04', isPinned: true, createdAt: '2026-08-03T09:00:00.000Z' }]
+    const r = recomputeQueue(input({ today: '2026-08-03', events, overrides }))
+
+    const onTarget = r.instances.filter((i) => i.scheduledDate === '2026-08-04')
+    expect(onTarget).toHaveLength(1)
+    expect(onTarget[0]?.templateId).toBe('w1s1')
+    expect(byId(r, 'w1s2').scheduledDate).not.toBe('2026-08-04')
+    expect(byId(r, 'w1s2').adjustmentReason).toMatch(/could not be honoured/i)
   })
 })
 
@@ -365,6 +475,99 @@ describe('race date anchoring', () => {
       const survivingOptional = weekInstances.some((i) => i.priority === 'optional' && i.scheduledDate !== null)
       const droppedEssential = weekInstances.some((i) => i.priority === 'essential' && i.status === 'autoDropped')
       expect(droppedEssential && survivingOptional).toBe(false)
+    }
+  })
+})
+
+describe('essential bump fallback: third-tier escalation (Finding 2)', () => {
+  it('places the essential by shedding the following week\'s lower-priority spillover', () => {
+    // Week 1 is entirely occupied by frozen fillers, so both `imp1`
+    // (important) and `ess1` (essential, processed after imp1) fail their
+    // own week outright and must escalate into week 2. Week 2 has Wed-Sat
+    // frozen, leaving only Mon/Tue naturally reachable. imp1 (processed
+    // first) claims Monday; that leaves Tuesday hard-conflict-blocked for
+    // ess1 (adjacent hardRun/hardRun) and nothing else free — ess1 cannot
+    // place in its own week or week 2's free days until imp1 yields.
+    const w1Fillers = [
+      fillerSession('f1', 1, 1, '2026-08-03'),
+      fillerSession('f2', 1, 2, '2026-08-04'),
+      fillerSession('f3', 1, 3, '2026-08-05'),
+      fillerSession('f4', 1, 4, '2026-08-06'),
+      fillerSession('f5', 1, 5, '2026-08-07'),
+      fillerSession('f6', 1, 6, '2026-08-08'),
+    ]
+    const w2Fillers = [
+      fillerSession('g3', 2, 3, '2026-08-12'),
+      fillerSession('g4', 2, 4, '2026-08-13'),
+      fillerSession('g5', 2, 5, '2026-08-14'),
+      fillerSession('g6', 2, 6, '2026-08-15'),
+    ]
+    const imp1: QueueTemplate = { templateId: 'imp1', weekNumber: 1, sessionSlot: 1, sequenceInWeek: 10, priority: 'important', recoveryTags: ['hardRun'], name: 'Important spillover' }
+    const ess1: QueueTemplate = { templateId: 'ess1', weekNumber: 1, sessionSlot: 2, sequenceInWeek: 11, priority: 'essential', recoveryTags: ['hardRun'], name: 'Essential target' }
+
+    const fillers = [...w1Fillers, ...w2Fillers]
+    const templates = [...fillers.map((f) => f.template), imp1, ess1]
+    const events = fillers.map((f) => f.occupyingEvent)
+
+    const r = recomputeQueue(input({ templates, events, today: '2026-08-03', raceDate: '2027-01-16' }))
+
+    expect(byId(r, 'ess1').scheduledDate).toBe('2026-08-10')
+    expect(byId(r, 'imp1').status).toBe('autoDropped')
+    expect(byId(r, 'imp1').scheduledDate).toBeNull()
+    const text = r.explanations.map((e) => e.text).join(' | ')
+    expect(text).toMatch(/Important spillover/)
+    expect(text).toMatch(/Essential target/)
+  })
+
+  it('never leaves an essential autoDropped while a lower-priority session in the same week is scheduled', () => {
+    // Same shape as above, but nothing is already occupying week 2 besides
+    // frozen fillers — the only lower-priority candidate is `opt2`, native
+    // to week 2 and not yet processed at all when `ess2`'s bump runs
+    // (Finding 2b's exact blind spot). A broken implementation that only
+    // considered already-placed candidates would find nothing to bump, drop
+    // ess2 immediately, and then let opt2 place normally later — this
+    // asserts that never happens, for every week in the result.
+    const w1Fillers = [
+      fillerSession('h1', 1, 1, '2026-08-03'),
+      fillerSession('h2', 1, 2, '2026-08-04'),
+      fillerSession('h3', 1, 3, '2026-08-05'),
+      fillerSession('h4', 1, 4, '2026-08-06'),
+      fillerSession('h5', 1, 5, '2026-08-07'),
+      fillerSession('h6', 1, 6, '2026-08-08'),
+    ]
+    const w2Fillers = [
+      fillerSession('j1', 2, 1, '2026-08-10'),
+      fillerSession('j2', 2, 2, '2026-08-11'),
+      fillerSession('j3', 2, 3, '2026-08-12'),
+      fillerSession('j4', 2, 4, '2026-08-13'),
+      fillerSession('j5', 2, 5, '2026-08-14', ['hardRun']),
+    ]
+    const ess2: QueueTemplate = { templateId: 'ess2', weekNumber: 1, sessionSlot: 1, sequenceInWeek: 10, priority: 'essential', recoveryTags: ['hardRun'], name: 'Essential target 2' }
+    const opt2: QueueTemplate = { templateId: 'opt2', weekNumber: 2, sessionSlot: 6, sequenceInWeek: 5, priority: 'optional', recoveryTags: ['easyRun'], name: 'Native week-2 optional' }
+
+    const fillers = [...w1Fillers, ...w2Fillers]
+    const templates = [...fillers.map((f) => f.template), ess2, opt2]
+    const events = fillers.map((f) => f.occupyingEvent)
+
+    const r = recomputeQueue(input({ templates, events, today: '2026-08-03', raceDate: '2027-01-16' }))
+
+    // ess2 genuinely cannot be rescued here (no already-occupied day in week
+    // 2 is freeable for it), so it drops — but opt2 must not be left
+    // standing as the session that displaced it.
+    expect(byId(r, 'ess2').status).toBe('autoDropped')
+    expect(byId(r, 'opt2').scheduledDate).toBeNull()
+
+    // Terminal statuses (completed/partiallyCompleted/skipped) are historical
+    // fact, not outcomes of the priority-ladder competition — the fillers
+    // used to build this dense scenario are excluded on that basis, leaving
+    // only instances that actually went through placement.
+    const terminal = new Set(['completed', 'partiallyCompleted', 'skipped'])
+    const byWeek = new Map<number, typeof r.instances>()
+    for (const i of r.instances) byWeek.set(i.weekNumber, [...(byWeek.get(i.weekNumber) ?? []), i])
+    for (const weekInstances of byWeek.values()) {
+      const droppedEssential = weekInstances.some((i) => i.priority === 'essential' && i.status === 'autoDropped')
+      const survivingLowerPriority = weekInstances.some((i) => i.priority !== 'essential' && !terminal.has(i.status) && i.scheduledDate !== null)
+      expect(droppedEssential && survivingLowerPriority).toBe(false)
     }
   })
 })

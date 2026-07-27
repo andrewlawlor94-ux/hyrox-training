@@ -8,6 +8,12 @@ import { ADJACENT_DAY_SPAN, ROLLING_WINDOW_DAYS, SIMULATION_CLEAR_DAYS_AFTER, MI
 export interface OccupiedDay {
   date: ISODate
   tags: RecoveryTag[]
+  /** Set to the session's name when this day is occupied because that
+   * session's completion was backdated (a COMPLETE_EARLIER event), rather
+   * than because it was actually scheduled there. Lets a session displaced
+   * by this day attribute the move to the backdated completion instead of
+   * claiming it "was missed" (`backdatedExplanation` in explain.ts). */
+  backdatedName?: string
 }
 
 export interface EligibilityResult {
@@ -37,7 +43,7 @@ export function simulationClearanceConflict(
   for (const day of occupied) {
     if (!day.tags.includes('raceSimulation')) continue
     const gap = daysBetween(day.date, candidate)
-    if (gap >= 1 && gap <= SIMULATION_CLEAR_DAYS_AFTER) {
+    if (gap >= ADJACENT_DAY_SPAN && gap <= SIMULATION_CLEAR_DAYS_AFTER) {
       return {
         severity: 'hard',
         reason: 'A race simulation needs clear recovery days before hard work resumes.',

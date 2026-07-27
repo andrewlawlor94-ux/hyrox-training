@@ -1,5 +1,6 @@
 import type { ISODate, Priority } from '@/domain/types'
 import { daysBetween } from '@/domain/dates'
+import { DAYS_PER_WEEK } from './constants'
 
 /**
  * Pure, locale-free copy builders for queue explanations. `toLocaleDateString`
@@ -22,7 +23,6 @@ export const MONTH_ABBREVIATIONS = [
  * a real calendar reference. Using `daysBetween` from the shared date module
  * keeps this pure and clock-free, per the domain purity rule. */
 const WEEKDAY_ANCHOR_MONDAY: ISODate = '2001-01-01'
-const DAYS_PER_WEEK = 7
 
 /** 'Monday'..'Sunday' for any ISO date, UTC, pure — no `toLocaleDateString`. */
 export function weekdayName(date: ISODate): string {
@@ -59,4 +59,13 @@ export function deferredExplanation(name: string, toDate: ISODate): string {
 /** e.g. 'Strength A moved after your backdated Tuesday run was recorded.' */
 export function backdatedExplanation(name: string, movedName: string): string {
   return `${name} moved after your backdated ${movedName} was recorded.`
+}
+
+/** e.g. 'The requested date for Strength B + stations could not be honoured
+ * because another session already occupies it; it was placed automatically
+ * instead.' Used when a pinned override collides with a day that is already
+ * occupied (a frozen instance or a higher-precedence pin), so the schedule
+ * never double-books a date. */
+export function pinNotHonoredExplanation(name: string): string {
+  return `The requested date for ${name} could not be honoured because another session already occupies it; it was placed automatically instead.`
 }

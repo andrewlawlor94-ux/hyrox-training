@@ -15,16 +15,23 @@ interface MatrixRow {
 }
 
 /**
- * Recovery conflict matrix (§4.2 / §15). Only the pairs below carry a
- * conflict; every other combination (including anything paired with
- * `easyRun`, `lowImpactAerobic`, or `recovery` on either side) is
- * intentionally absent, which is what makes "an easy run after anything" and
- * "anything after low-impact aerobic work" conflict-free without needing
- * their own rows — omission from this table *is* the "no conflict" answer.
+ * Recovery conflict matrix (§4.2 / §15). This table is the source of truth —
+ * it is a faithful, cell-for-cell transcription of the approved design
+ * spec's conflict matrix, and any change to matrix behaviour must start by
+ * editing the spec's table, not by adding a row here that "feels" right.
+ * Only the pairs below carry a conflict; every other combination (including
+ * anything paired with `easyRun`, `lowImpactAerobic`, or `recovery` on either
+ * side) is intentionally absent, which is what makes "an easy run after
+ * anything" and "anything after low-impact aerobic work" conflict-free
+ * without needing their own rows — omission from this table *is* the "no
+ * conflict" answer.
  *
- * - hardRun/hardRun, hardRun/longRun, longRun/hardRun, longRun/longRun: "no
- *   hard running on consecutive days" — hardRun and longRun are both forms
- *   of hard running for this rule.
+ * - hardRun/hardRun, hardRun/longRun, longRun/hardRun: "no hard running on
+ *   consecutive days" — hardRun and longRun are both forms of hard running
+ *   for this rule. `longRun`/`longRun` is deliberately absent: it is not in
+ *   the spec's table, the seeded plan never produces two long runs in the
+ *   same week, and an invented hard conflict here would only add a spurious
+ *   block with no offsetting benefit.
  * - lowerBodyStrength -> hardRun: "no heavy lower-body strength immediately
  *   before running intervals." Deliberately one-directional (a hard run the
  *   day before lower-body strength is not restricted by this rule) and
@@ -42,7 +49,6 @@ const MATRIX: MatrixRow[] = [
   { previous: 'hardRun', candidate: 'hardRun', severity: 'hard' },
   { previous: 'hardRun', candidate: 'longRun', severity: 'hard' },
   { previous: 'longRun', candidate: 'hardRun', severity: 'hard' },
-  { previous: 'longRun', candidate: 'longRun', severity: 'hard' },
   { previous: 'lowerBodyStrength', candidate: 'hardRun', severity: 'hard' },
   { previous: 'highImpactStation', candidate: 'hardRun', severity: 'soft' },
   { previous: 'lowerBodyStrength', candidate: 'lowerBodyStrength', severity: 'soft' },

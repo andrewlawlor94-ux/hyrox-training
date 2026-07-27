@@ -1,8 +1,8 @@
 import type { ISODate, Priority, RecoveryTag } from '@/domain/types'
-import { addDays, compareDates } from '@/domain/dates'
+import { addDays, compareDates, daysBetween } from '@/domain/dates'
 import type { OccupiedDay } from './eligibility'
 import { isDayEligible } from './eligibility'
-import { deferredExplanation, droppedExplanation, movedExplanation, weekdayName } from './explain'
+import { backdatedExplanation, deferredExplanation, droppedExplanation, movedExplanation, weekdayName } from './explain'
 import { AUTOMATED_PLACEMENT_WEEKDAYS_PER_WEEK, BUMP_PRIORITY_ORDER, DAYS_PER_WEEK } from './constants'
 
 /** A not-yet-terminal instance still needing a placement decision. */
@@ -75,21 +75,54 @@ function attemptFollowingWeek(inst: OpenInstance, occupied: OccupiedDay[], raceD
   return firstEligibleDay(days, inst.recoveryTags, occupied, raceDate)
 }
 
-/** Frees up room for a still-unplaced `essential` by dropping the lowest
- * priority session already scheduled this week (optional before important,
- * per `BUMP_PRIORITY_ORDER`). Mutates `occupied` and `placements` in place.
- * Returns whether a session was actually freed. */
+/** True when `date` falls within plan week `weekNumber`'s calendar span
+ * (Monday through Sunday), regardless of which template's own week that
+ * date's session nominally belongs to — this is what lets an instance that
+ * spilled over from an earlier week's escalation (`attemptFollowingWeek`)
+ * still count as occupying *this* week's calendar space. */
+function isDateInWeek(date: ISODate, weekNumber: number, planStartDate: ISODate): boolean {
+  const monday = addDays(planStartDate, (weekNumber - 1) * DAYS_PER_WEEK)
+  const offset = daysBetween(monday, date)
+  return offset >= 0 && offset < DAYS_PER_WEEK
+}
+
+/** Frees up room in `weekNumber`'s calendar span for a still-unplaced
+ * `essential` deferring into it, by shedding that week's own lowest-priority
+ * session (optional before important, per `BUMP_PRIORITY_ORDER`). Mutates
+ * `occupied` and `placements` in place. Returns whether a session was
+ * actually shed.
+ *
+ * A candidate qualifies two ways: (1) it already holds a day that falls
+ * within `weekNumber`'s calendar span — whether that's its own native week
+ * or a day it reached by spilling over from an earlier week's escalation —
+ * in which case that day is freed from `occupied`; or (2) it is native to
+ * `weekNumber` and has not been decided at all yet, in which case it is
+ * marked dropped *before* it ever gets a turn, rather than only being
+ * eligible once it has already (by luck of processing order) claimed a day.
+ * That second branch is what closes Finding 2b's gap: since the outer loop
+ * processes weeks in ascending order, `weekNumber`'s own templates are
+ * ordinarily still undecided when an earlier week's essential reaches this
+ * point, so restricting the search to already-placed instances would let an
+ * undecided lower-priority session go on to place successfully later —
+ * exactly the invariant the priority ladder exists to prevent. A candidate
+ * already decided as dropped offers nothing further and is skipped. The
+ * `placements.has` guard in the main loop below is what stops a
+ * preemptively-dropped candidate from being silently re-decided (and
+ * potentially placed) once the outer loop reaches its own turn. */
 function bumpLowestPriorityInWeek(
   weekNumber: number,
   openInstances: OpenInstance[],
   placements: Map<string, PlacementOutcome>,
   occupied: OccupiedDay[],
+  planStartDate: ISODate,
 ): boolean {
   for (const priority of BUMP_PRIORITY_ORDER) {
     const candidate = openInstances.find((i) => {
-      if (i.weekNumber !== weekNumber || i.priority !== priority) return false
+      if (i.priority !== priority) return false
       const placed = placements.get(i.templateId)
-      return placed !== undefined && placed.scheduledDate !== null
+      if (placed === undefined) return i.weekNumber === weekNumber
+      if (placed.scheduledDate === null) return false
+      return isDateInWeek(placed.scheduledDate, weekNumber, planStartDate)
     })
     if (candidate === undefined) continue
 
@@ -101,8 +134,8 @@ function bumpLowestPriorityInWeek(
     }
     placements.set(candidate.templateId, {
       scheduledDate: null,
-      explanation: droppedExplanation(candidate.name, candidate.priority, 'make room for an essential session this week'),
-      dropped: { templateId: candidate.templateId, priority: candidate.priority, reason: 'Made room for an essential session this week.' },
+      explanation: droppedExplanation(candidate.name, candidate.priority, 'make room for an essential session in the following week'),
+      dropped: { templateId: candidate.templateId, priority: candidate.priority, reason: 'Made room for an essential session in the following week.' },
     })
     return true
   }
@@ -127,7 +160,7 @@ export function placeOpenInstances(
   raceDate: ISODate,
   planStartDate: ISODate,
 ): Map<string, PlacementOutcome> {
-  const occupied: OccupiedDay[] = initialOccupied.map((o) => ({ date: o.date, tags: [...o.tags] }))
+  const occupied: OccupiedDay[] = initialOccupied.map((o) => ({ ...o, tags: [...o.tags] }))
   const placements = new Map<string, PlacementOutcome>()
 
   const place = (inst: OpenInstance, day: ISODate): void => {
@@ -136,7 +169,14 @@ export function placeOpenInstances(
     if (inst.deferralRequested) {
       explanation = deferredExplanation(inst.name, day)
     } else if (compareDates(day, inst.plannedDate) !== 0) {
-      explanation = movedExplanation(inst.name, day, `${weekdayName(inst.plannedDate)} was missed`)
+      // A backdated completion (COMPLETE_EARLIER) that occupies this
+      // instance's planned date is a different cause than an ordinary missed
+      // day, and gets its own, causally-accurate copy rather than the
+      // generic "was missed" phrasing (Finding 4).
+      const backdatedOccupant = occupied.find((o) => o.date === inst.plannedDate && o.backdatedName !== undefined)
+      explanation = backdatedOccupant?.backdatedName !== undefined
+        ? backdatedExplanation(inst.name, backdatedOccupant.backdatedName)
+        : movedExplanation(inst.name, day, `${weekdayName(inst.plannedDate)} was missed`)
     }
     placements.set(inst.templateId, { scheduledDate: day, explanation, dropped: null })
   }
@@ -150,6 +190,12 @@ export function placeOpenInstances(
   }
 
   for (const inst of openInstances) {
+    // Already decided — either a previous essential's bump preemptively
+    // dropped this instance before its own turn (Finding 2b), or (in
+    // principle) something else already resolved it. Re-processing it here
+    // would silently overwrite that earlier, deliberate decision.
+    if (placements.has(inst.templateId)) continue
+
     const ownWeek = attemptOwnWeek(inst, occupied, today, raceDate, planStartDate)
     if (ownWeek !== null) {
       place(inst, ownWeek)
@@ -172,8 +218,9 @@ export function placeOpenInstances(
       continue
     }
 
-    // essential: bump this week's lowest-priority scheduled session and retry once.
-    const freedRoom = bumpLowestPriorityInWeek(inst.weekNumber, openInstances, placements, occupied)
+    // essential: shed the *following* week's lowest-priority session (the
+    // week it is actually deferring into, not its own) and retry once.
+    const freedRoom = bumpLowestPriorityInWeek(inst.weekNumber + 1, openInstances, placements, occupied, planStartDate)
     const retryDay = freedRoom
       ? attemptOwnWeek(inst, occupied, today, raceDate, planStartDate) ?? attemptFollowingWeek(inst, occupied, raceDate, planStartDate)
       : null

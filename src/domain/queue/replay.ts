@@ -15,6 +15,12 @@ export interface InstanceState {
    * happened to this instance — it must land on a day different from its
    * planned date, not merely an eligible one. */
   deferralRequested: boolean
+  /** True when the completion was recorded via COMPLETE_EARLIER (a
+   * backdated log entry) rather than COMPLETE — distinguishes "this session
+   * was missed" from "the athlete logged this after the fact", which take
+   * different explanation copy when the backdated day displaces another
+   * session (`backdatedExplanation` in explain.ts). */
+  completedViaBackdate: boolean
 }
 
 /** Stable sort by `at`, then `id` as a tiebreaker, so array order can never
@@ -55,7 +61,10 @@ function readStringPayload(payload: Record<string, string | number | boolean | n
 export function applyEvents(templates: QueueTemplate[], events: ScheduleEvent[]): Map<string, InstanceState> {
   const states = new Map<string, InstanceState>()
   for (const t of templates) {
-    states.set(t.templateId, { status: 'upcoming', completedForDate: null, isManualOverride: false, deferralRequested: false })
+    states.set(t.templateId, {
+      status: 'upcoming', completedForDate: null, isManualOverride: false,
+      deferralRequested: false, completedViaBackdate: false,
+    })
   }
 
   for (const e of events) {
@@ -67,20 +76,25 @@ export function applyEvents(templates: QueueTemplate[], events: ScheduleEvent[])
       state.status = 'completed'
       state.completedForDate = readStringPayload(e.payload, 'forDate')
       state.deferralRequested = false
+      state.completedViaBackdate = e.type === 'COMPLETE_EARLIER'
     } else if (e.type === 'PARTIAL') {
       state.status = 'partiallyCompleted'
       state.completedForDate = readStringPayload(e.payload, 'forDate')
       state.deferralRequested = false
+      state.completedViaBackdate = false
     } else if (e.type === 'SKIP') {
       state.status = 'skipped'
       state.completedForDate = null
       state.deferralRequested = false
+      state.completedViaBackdate = false
     } else if (e.type === 'DEFER') {
       state.status = 'deferred'
       state.deferralRequested = true
+      state.completedViaBackdate = false
     } else if (e.type === 'MOVE') {
       state.isManualOverride = true
       state.deferralRequested = false
+      state.completedViaBackdate = false
     }
     // PLAN_EDIT / RACE_DATE_CHANGE affect the templates/raceDate this module
     // is handed, not per-instance status — no-op here.
