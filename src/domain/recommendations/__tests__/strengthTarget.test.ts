@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Exercise } from '@/domain/types'
+import { kgToLb, lbToKg } from '@/domain/units/convert'
 import type { RecommendationSymptomState } from '../increments'
 import type { StrengthSessionHistory } from '../strengthTarget'
 import { recommendStrengthTarget } from '../strengthTarget'
@@ -11,7 +12,11 @@ const squat: Exercise = {
   techniqueNotes: '', isArchived: false, isSeeded: true,
   createdAt: '2026-07-27T00:00:00.000Z', updatedAt: '2026-07-27T00:00:00.000Z',
 }
-const rx = { sets: 4, repMin: 5, targetLoad: 175, loadUnit: 'lb' as const }
+// prescription only ever reads targetLoad/loadUnit — sets/repMin dropped
+// from the Pick (and from this fixture) since the per-session
+// prescribedSets/prescribedRepMin on StrengthSessionHistory are the actual
+// source used to evaluate whether a session met its prescription.
+const rx = { targetLoad: 175, loadUnit: 'lb' as const }
 // Explicitly typed (rather than inferred from the 'green' as const literals)
 // so `call`'s `symptoms = calm` default parameter widens to
 // RecommendationSymptomState instead of narrowing to a type that only
@@ -54,7 +59,7 @@ describe('no history', () => {
 describe('no history and no prescription target', () => {
   it('falls back to the exercise default unit with a zero value and says so', () => {
     const r = recommendStrengthTarget({
-      exercise: squat, prescription: { sets: 4, repMin: 5 },
+      exercise: squat, prescription: {},
       history: [], symptoms: calm, today: TODAY,
     })
     expect(r.target).toEqual({ value: 0, unit: 'lb' })
@@ -217,10 +222,42 @@ describe('determinism and non-destructiveness', () => {
   it('never increases a station load because the increment is zero', () => {
     const sled: Exercise = { ...squat, id: 'ex_sled', category: 'sled', progressionIncrement: 0, incrementUnit: 'kg', defaultUnit: 'kg' }
     const r = recommendStrengthTarget({
-      exercise: sled, prescription: { sets: 6, repMin: 1, targetLoad: 152, loadUnit: 'kg' },
+      exercise: sled, prescription: { targetLoad: 152, loadUnit: 'kg' },
       history: [{ date: '2026-08-17', prescribedSets: 6, prescribedRepMin: 1, completedSets: [{ weight: 152, unit: 'kg', reps: 1, rir: 3 }] }],
       symptoms: calm, today: TODAY,
     })
     expect(r.target).toEqual({ value: 152, unit: 'kg' })
+  })
+})
+
+describe('increment unit conversion', () => {
+  it('converts a kg increment into lb before adding it to an lb previous load', () => {
+    // Buggy (unconverted) implementation would give 175 + 10 = 185 lb.
+    // Correct implementation converts 10 kg into lb first: ~197.05 lb.
+    // The two are unmistakably different, so this discriminates a dropped
+    // convertLoad call from a correct one.
+    const kgIncrementSquat: Exercise = { ...squat, id: 'ex_squat_kg_increment', progressionIncrement: 10, incrementUnit: 'kg' }
+    const r = recommendStrengthTarget({
+      exercise: kgIncrementSquat, prescription: rx,
+      history: [session('2026-08-17', 175, 5, 2)], symptoms: calm, today: TODAY,
+    })
+    expect(r.mode).toBe('increase')
+    expect(r.target).toEqual({ value: 175 + kgToLb(10), unit: 'lb' })
+  })
+
+  it('converts an lb increment into kg before adding it to a kg previous load (mirror case)', () => {
+    // Buggy (unconverted) implementation would give 100 + 8 = 108 kg.
+    // Correct implementation converts 8 lb into kg first: ~103.63 kg.
+    const lbIncrementSquat: Exercise = { ...squat, id: 'ex_squat_lb_increment', defaultUnit: 'kg', progressionIncrement: 8, incrementUnit: 'lb' }
+    const kgSession: StrengthSessionHistory = {
+      date: '2026-08-17', prescribedSets: 4, prescribedRepMin: 5,
+      completedSets: Array.from({ length: 4 }, () => ({ weight: 100, unit: 'kg' as const, reps: 5, rir: 2 })),
+    }
+    const r = recommendStrengthTarget({
+      exercise: lbIncrementSquat, prescription: { targetLoad: 100, loadUnit: 'kg' },
+      history: [kgSession], symptoms: calm, today: TODAY,
+    })
+    expect(r.mode).toBe('increase')
+    expect(r.target).toEqual({ value: 100 + lbToKg(8), unit: 'kg' })
   })
 })

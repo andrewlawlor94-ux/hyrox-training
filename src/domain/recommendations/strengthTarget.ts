@@ -135,7 +135,7 @@ function addIncrement(previousLoad: Load, increment: Load): Load {
 
 export function recommendStrengthTarget(ctx: {
   exercise: Exercise
-  prescription: Pick<Prescription, 'sets' | 'repMin' | 'targetLoad' | 'loadUnit'>
+  prescription: Pick<Prescription, 'targetLoad' | 'loadUnit'>
   history: StrengthSessionHistory[]
   symptoms: RecommendationSymptomState
   today: ISODate
