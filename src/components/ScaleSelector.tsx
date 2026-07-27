@@ -40,7 +40,7 @@ export const ScaleSelector: FC<ScaleSelectorProps> = ({
                 type="radio"
                 id={optionId}
                 name={groupName}
-                className="visually-hidden"
+                className="scale-selector__input visually-hidden"
                 checked={value === option}
                 onChange={() => {
                   onChange(option)

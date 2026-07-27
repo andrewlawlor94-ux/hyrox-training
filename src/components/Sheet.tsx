@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import type { FC, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 
 type SheetProps = {
@@ -24,6 +24,7 @@ function getFocusable(panel: HTMLDivElement): HTMLElement[] {
 export const Sheet: FC<SheetProps> = ({ open, onClose, title, children }) => {
   const panelRef = useRef<HTMLDivElement>(null)
   const previouslyFocused = useRef<HTMLElement | null>(null)
+  const titleId = useId()
 
   useEffect(() => {
     if (!open) return undefined
@@ -77,14 +78,14 @@ export const Sheet: FC<SheetProps> = ({ open, onClose, title, children }) => {
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={titleId}
         className="sheet-panel"
         onClick={stopPropagation}
         onKeyDown={handleKeyDown}
         tabIndex={-1}
       >
         <div className="sheet-panel__header">
-          <h2 className="sheet-panel__title">{title}</h2>
+          <h2 id={titleId} className="sheet-panel__title">{title}</h2>
           <button
             type="button"
             className="sheet-panel__close"

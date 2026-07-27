@@ -31,6 +31,19 @@
 
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
 
+  /*
+   * Type scale: covers only the sizes component CSS actually uses today
+   * (labels/captions, body copy, sheet/error-boundary headings, the sheet
+   * close glyph). --input-font-size stays separate and is never smaller than
+   * 16px — nothing here should be substituted onto an <input>.
+   */
+  --font-size-xs: 13px;
+  --font-size-sm: 14px;
+  --font-size-md: 15px;
+  --font-size-lg: 17px;
+  --font-size-xl: 18px;
+  --font-size-2xl: 22px;
+
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
@@ -38,4 +51,8 @@
 
   --nav-height: 56px;
   --timer-bar-height: 48px;
+
+  /* Overlay (Sheet backdrop): stacking order and scrim tint. */
+  --z-overlay: 50;
+  --overlay-scrim: rgba(16, 24, 40, 0.45);
 }

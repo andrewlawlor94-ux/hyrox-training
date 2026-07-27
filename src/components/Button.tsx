@@ -9,10 +9,14 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 }
 
 /**
- * Native <button> styled from tokens. `disabled` is deliberately kept out of the
- * native `disabled` attribute: it is surfaced as `aria-disabled` and the click
- * handler is guarded in JS instead, so a disabled button stays focusable and
- * discoverable to assistive tech rather than disappearing from the tab order.
+ * Native <button> styled from tokens. `disabled` maps straight to the native
+ * `disabled` attribute so the platform blocks click dispatch unconditionally
+ * (needed for data-integrity cases like guarding against double-submitting a
+ * logged set) rather than relying on a JS guard that only holds once React has
+ * finished re-rendering with the new prop. The JS guard below is kept as
+ * defence in depth, not as the primary mechanism. Assistive tech already
+ * receives the disabled state from the native attribute, so `aria-disabled`
+ * is not also set.
  */
 export const Button: FC<ButtonProps> = ({
   variant = 'primary',
@@ -36,7 +40,7 @@ export const Button: FC<ButtonProps> = ({
       {...rest}
       type={type}
       className={classes}
-      aria-disabled={disabled || undefined}
+      disabled={disabled}
       onClick={handleClick}
     >
       {children}

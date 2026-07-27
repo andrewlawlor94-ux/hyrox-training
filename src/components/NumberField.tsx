@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ChangeEvent, FC } from 'react'
 
 type NumberFieldProps = {
@@ -29,6 +29,12 @@ function toText(value: number | null): string {
  * `value` on every keystroke whenever the caller doesn't (or can't, e.g.
  * mid-render) echo the parsed number straight back, which would otherwise
  * make typing multi-digit numbers impossible.
+ *
+ * The resync from `value` is gated on focus: while the input is focused the
+ * buffer is left alone, so typing `0` then `5` reads back as "05" instead of
+ * being rewritten to "5", and a parent that clamps/rounds the echoed value
+ * can't fight the user's in-progress keystrokes. On blur (or whenever `value`
+ * changes while unfocused) the buffer is resynced to the canonical value.
  */
 export const NumberField: FC<NumberFieldProps> = ({
   label,
@@ -43,8 +49,10 @@ export const NumberField: FC<NumberFieldProps> = ({
   hideLabel = false,
 }) => {
   const [text, setText] = useState(() => toText(value))
+  const isFocused = useRef(false)
 
   useEffect(() => {
+    if (isFocused.current) return
     setText(toText(value))
   }, [value])
 
@@ -61,6 +69,15 @@ export const NumberField: FC<NumberFieldProps> = ({
     onChange(Number.isFinite(parsed) ? parsed : null)
   }
 
+  const handleFocus = (): void => {
+    isFocused.current = true
+  }
+
+  const handleBlur = (): void => {
+    isFocused.current = false
+    setText(toText(value))
+  }
+
   const inputClasses = unit ? 'number-field__input number-field__input--with-unit' : 'number-field__input'
 
   return (
@@ -75,6 +92,11 @@ export const NumberField: FC<NumberFieldProps> = ({
           inputMode={inputMode}
           value={text}
           onChange={handleChange}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          // step/min/max are advisory metadata only: on a type="text" input the
+          // browser does not enforce or validate against them. Callers that need
+          // clamping must do it themselves in onChange/the value they pass back.
           step={step}
           min={min}
           max={max}

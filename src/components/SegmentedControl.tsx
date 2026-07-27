@@ -31,7 +31,7 @@ export function SegmentedControl<T extends string>({
                 type="radio"
                 id={optionId}
                 name={groupName}
-                className="visually-hidden"
+                className="segmented-control__input visually-hidden"
                 checked={option.value === value}
                 onChange={() => {
                   onChange(option.value)
