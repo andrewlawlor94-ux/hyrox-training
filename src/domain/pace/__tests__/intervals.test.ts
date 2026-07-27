@@ -60,6 +60,22 @@ describe('summarizeSplits', () => {
   it('returns a null mean when no work split has both distance and duration', () => {
     expect(summarizeSplits([{ kind: 'work', durationSec: 120 }]).meanWorkPaceSecPerKm).toBeNull()
   })
+
+  // Guards the weighting rule specifically. Every other fixture here uses equal
+  // 1000 m work splits, where summing-then-dividing and averaging the per-split
+  // paces give the same answer — so those fixtures cannot catch a regression to
+  // an average-of-averages. These splits are deliberately unequal:
+  //   correct (total 700 s over 2.0 km) -> 350 s/km
+  //   naive mean of 400 and 333.33      -> 366.67 s/km
+  it('weights mean work pace by distance rather than averaging per-split paces', () => {
+    const summary = summarizeSplits([
+      { kind: 'work', distanceM: 500, durationSec: 200 },
+      { kind: 'recovery', distanceM: 200, durationSec: 90 },
+      { kind: 'work', distanceM: 1500, durationSec: 500 },
+    ])
+    expect(summary.meanWorkPaceSecPerKm).toBe(350)
+    expect(summary.meanWorkPaceSecPerKm).not.toBeCloseTo(366.67, 1)
+  })
 })
 
 describe('splitPaceSecPerKm', () => {
