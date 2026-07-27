@@ -17,3 +17,6 @@ dev-dist/
 
 # SDD controller scratch
 .superpowers/
+
+# Athlete-specific calibration (local only, never committed)
+docs/private/
