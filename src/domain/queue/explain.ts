@@ -61,18 +61,6 @@ export function backdatedExplanation(name: string, movedName: string): string {
   return `${name} moved after your backdated ${movedName} was recorded.`
 }
 
-/** e.g. 'Important Long run session dropped because this week's essential
- * session could not be placed.' Used when the priority-ladder guard holds a
- * lower-priority session out of a week whose own essential session was
- * already decided as dropped — see `weeksWithDroppedEssential` in
- * `placement.ts`. Deliberately distinct from `droppedExplanation`'s generic
- * "preserve recovery" copy: the cause here is the week's essential session,
- * not this session's own eligibility search coming up empty. */
-export function priorityGuardDropExplanation(name: string, priority: Priority): string {
-  const label = priority.charAt(0).toUpperCase() + priority.slice(1)
-  return `${label} ${name} session dropped because this week's essential session could not be placed.`
-}
-
 /** e.g. 'The requested date for Strength B + stations could not be honoured
  * because another session already occupies it; it was placed automatically
  * instead.' Used when a pinned override collides with a day that is already

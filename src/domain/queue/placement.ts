@@ -2,7 +2,7 @@ import type { ISODate, Priority, RecoveryTag } from '@/domain/types'
 import { addDays, compareDates } from '@/domain/dates'
 import type { OccupiedDay } from './eligibility'
 import { isDayEligible } from './eligibility'
-import { backdatedExplanation, deferredExplanation, droppedExplanation, movedExplanation, priorityGuardDropExplanation, weekdayName } from './explain'
+import { backdatedExplanation, deferredExplanation, droppedExplanation, movedExplanation, weekdayName } from './explain'
 import { AUTOMATED_PLACEMENT_WEEKDAYS_PER_WEEK, DAYS_PER_WEEK, PRIORITY_TIER_RANK } from './constants'
 
 /** A not-yet-terminal instance still needing a placement decision. */
@@ -82,11 +82,17 @@ function attemptFollowingWeek(inst: OpenInstance, occupied: OccupiedDay[], raceD
  * data-derived tiebreaker so the result can never depend on input array
  * position. Placing strictly by tier — every essential decided, in full,
  * before any important is even attempted, and every important before any
- * optional — is what makes the priority-ladder invariant (an essential is
- * never `autoDropped` while a lower-priority same-week peer holds a
- * scheduled date) hold structurally rather than through a reactive,
- * after-the-fact correction: a lower-priority instance is simply never
- * *decided* while a higher-priority one still has an undecided fate.
+ * optional — is what makes the priority ladder's real guarantee hold
+ * structurally rather than through a reactive, after-the-fact correction: a
+ * lower-priority instance is never *decided*, and so can never claim a day,
+ * while a higher-priority one still has an undecided fate. That is what
+ * "essential sessions move first" actually protects against — a
+ * lower-priority session crowding an essential out of a day the essential
+ * could have used. It deliberately does *not* mean an essential dropping
+ * forces every lower-priority same-week peer to drop too: when an essential
+ * fails, it is because its own week and its one following-week escalation
+ * were exhausted by frozen history, pins, or other essentials — none of
+ * which a same-week peer's placement caused or could undo by yielding.
  */
 function byPriorityTier(a: OpenInstance, b: OpenInstance): number {
   const rankDiff = PRIORITY_TIER_RANK[a.priority] - PRIORITY_TIER_RANK[b.priority]
@@ -101,14 +107,14 @@ function byPriorityTier(a: OpenInstance, b: OpenInstance): number {
  * Places every open (non-frozen, non-pinned) instance, re-sorted internally
  * by `byPriorityTier` regardless of the order `openInstances` arrives in —
  * every essential is decided before any important is attempted, and every
- * important before any optional, which is what makes the priority-ladder
- * invariant hold by construction (see `byPriorityTier`) rather than through
- * a reactive "bump a lower-priority session" correction. Within a tier, the
- * existing `(weekNumber, sequenceInWeek)` order is what makes the
- * "no double-workout catch-up" behaviour fall out naturally: each instance
- * claims a day before the next one *in its tier* is even considered, so two
- * open instances of the same priority can never race for the same date
- * regardless of how far behind the plan is.
+ * important before any optional, which is what prevents a lower-priority
+ * session from ever crowding an essential out of a day it needed (see
+ * `byPriorityTier`) without a reactive "bump a lower-priority session"
+ * correction. Within a tier, the existing `(weekNumber, sequenceInWeek)`
+ * order is what makes the "no double-workout catch-up" behaviour fall out
+ * naturally: each instance claims a day before the next one *in its tier* is
+ * even considered, so two open instances of the same priority can never race
+ * for the same date regardless of how far behind the plan is.
  *
  * `initialOccupied` (frozen instances plus pinned overrides) is copied, not
  * mutated, and grows by one entry each time an instance is placed.
@@ -123,21 +129,6 @@ export function placeOpenInstances(
   const occupied: OccupiedDay[] = initialOccupied.map((o) => ({ ...o, tags: [...o.tags] }))
   const placements = new Map<string, PlacementOutcome>()
   const sorted = [...openInstances].sort(byPriorityTier)
-
-  // Populated only with `weekNumber`s whose essential(s) were fully decided
-  // and still dropped. Because every essential is processed (in full,
-  // including its following-week escalation) before any important/optional
-  // is even attempted, this set is complete by the time the first
-  // lower-priority instance is considered — no lower-priority instance native
-  // to one of these weeks may hold a scheduled date afterward, whether from
-  // its own week or an escalation, or the invariant the priority ladder
-  // exists to guarantee would be broken exactly as Finding A describes: a
-  // lower-priority peer succeeding (via its own week *or* an escalation into
-  // the essential's target week) while its same-week essential sits dropped.
-  // This is a plain fact check against an already-final decision, not a
-  // reactive search for a candidate to un-decide — the essential's own
-  // outcome is never revisited.
-  const weeksWithDroppedEssential = new Set<number>()
 
   const place = (inst: OpenInstance, day: ISODate): void => {
     occupied.push({ date: day, tags: [...inst.recoveryTags] })
@@ -157,26 +148,15 @@ export function placeOpenInstances(
     placements.set(inst.templateId, { scheduledDate: day, explanation, dropped: null })
   }
 
-  const drop = (inst: OpenInstance, guarded: boolean): void => {
-    const explanation = guarded
-      ? priorityGuardDropExplanation(inst.name, inst.priority)
-      : droppedExplanation(inst.name, inst.priority, 'preserve recovery')
-    const reason = guarded
-      ? 'This week\'s essential session could not be placed, so lower-priority sessions in the same week are not scheduled either.'
-      : 'No eligible day remained for this session before the plan needed to move on.'
+  const drop = (inst: OpenInstance): void => {
     placements.set(inst.templateId, {
       scheduledDate: null,
-      explanation,
-      dropped: { templateId: inst.templateId, priority: inst.priority, reason },
+      explanation: droppedExplanation(inst.name, inst.priority, 'preserve recovery'),
+      dropped: { templateId: inst.templateId, priority: inst.priority, reason: 'No eligible day remained for this session before the plan needed to move on.' },
     })
   }
 
   for (const inst of sorted) {
-    if (inst.priority !== 'essential' && weeksWithDroppedEssential.has(inst.weekNumber)) {
-      drop(inst, true)
-      continue
-    }
-
     const ownWeek = attemptOwnWeek(inst, occupied, today, raceDate, planStartDate)
     if (ownWeek !== null) {
       place(inst, ownWeek)
@@ -184,7 +164,7 @@ export function placeOpenInstances(
     }
 
     if (inst.priority === 'optional') {
-      drop(inst, false)
+      drop(inst)
       continue
     }
 
@@ -194,8 +174,19 @@ export function placeOpenInstances(
       continue
     }
 
-    drop(inst, false)
-    if (inst.priority === 'essential') weeksWithDroppedEssential.add(inst.weekNumber)
+    // `important` and `essential` are now symmetric here: both get exactly
+    // one following-week escalation, then drop. The only thing that gives
+    // essentials priority is *processing order* (they are fully decided
+    // first, per `byPriorityTier`) — an essential's drop is never "corrected"
+    // by also dropping a same-week lower-priority peer, because doing so
+    // would only help when that peer was genuinely occupying a day the
+    // essential could otherwise have used, which tier ordering already
+    // guarantees can never happen (no lower-priority instance is ever
+    // decided while an essential's fate is still open). When an essential
+    // drops anyway, it is because its own week and the following week were
+    // exhausted by *frozen history, pins, or other essentials* — none of
+    // which a same-week lower-priority peer's drop could ever undo.
+    drop(inst)
   }
 
   return placements

@@ -3,17 +3,18 @@ import { recomputeQueue as recomputeQueueImpl } from '../recompute'
 import type { QueueInput, QueueResult, QueueTemplate } from '../recompute'
 import { event, fillerSession, input, PLAN_START, weekTemplates } from './recompute.fixtures'
 
-// Every `QueueResult` produced anywhere in this file is recorded here, purely
-// by wrapping the real `recomputeQueue` under the same name — every existing
-// call site below is unchanged and transparently contributes a result. The
-// "priority ladder invariant holds across every scenario in this file"
-// describe block at the end of the file sweeps this array, which is what
-// makes that sweep genuinely file-wide rather than scoped to one fixture
-// (Finding A, requirement 2) without needing to touch every individual test.
-const allResults: QueueResult[] = []
+// Every (input, result) pair produced anywhere in this file is recorded here,
+// purely by wrapping the real `recomputeQueue` under the same name — every
+// existing call site below is unchanged and transparently contributes a run.
+// The "priority ladder invariant holds across every scenario in this file"
+// describe block at the end of the file sweeps this array with
+// `assertNoCrowdOut`, which is what makes that sweep genuinely file-wide
+// rather than scoped to one fixture (Finding A, requirement 2) without
+// needing to touch every individual test.
+const allRuns: { input: QueueInput; result: QueueResult }[] = []
 function recomputeQueue(queueInput: QueueInput): QueueResult {
   const result = recomputeQueueImpl(queueInput)
-  allResults.push(result)
+  allRuns.push({ input: queueInput, result })
   return result
 }
 
@@ -23,21 +24,41 @@ function byId(result: ReturnType<typeof recomputeQueue>, templateId: string) {
   return found
 }
 
-/** The priority-ladder invariant (Finding A): within one native `weekNumber`,
- * an `essential` session must never be `autoDropped` while a lower-priority
- * peer of that same `weekNumber` holds a non-null `scheduledDate`. Terminal
- * statuses (`completed`/`partiallyCompleted`/`skipped`) are historical fact —
- * already-recorded outcomes, not results of the placement competition — so
- * they are excluded from "surviving lower-priority" on that basis, matching
- * the exclusion already used ad hoc in this file before this sweep existed. */
-function assertPriorityLadderInvariant(r: QueueResult): void {
+/** The priority ladder's real guarantee (Finding A, fix pass 3): a
+ * lower-priority session must never *crowd out* a same-native-week essential
+ * — i.e. take a day the essential could otherwise have used. This is a
+ * causal property, not "no dropped essential ever coexists with any scheduled
+ * lower-priority peer" (fix pass 2's literal-but-wrong reading, which forced
+ * a guard that sacrificed lower-priority sessions even when they weren't
+ * blocking anything). Tested here by counterfactual: for every `autoDropped`
+ * essential, and every scheduled, non-terminal, lower-priority peer of the
+ * same `weekNumber`, remove that one peer's template from the input and
+ * recompute — if the essential *still* cannot place, the peer was never in
+ * its way (the drop was caused by frozen history, a pin, or another
+ * essential, none of which the peer's absence changes) and nothing is wrong.
+ * If the essential *would* now place, the peer was genuinely crowding it out
+ * — a real violation. Terminal statuses (`completed`/`partiallyCompleted`/
+ * `skipped`) are historical fact, not competitive placement outcomes, so they
+ * are excluded from "peer to test removing", matching the exclusion used
+ * before this sweep existed. */
+function assertNoCrowdOut(queueInput: QueueInput, r: QueueResult): void {
   const terminal = new Set(['completed', 'partiallyCompleted', 'skipped'])
   const byWeek = new Map<number, QueueResult['instances']>()
   for (const i of r.instances) byWeek.set(i.weekNumber, [...(byWeek.get(i.weekNumber) ?? []), i])
+
   for (const weekInstances of byWeek.values()) {
-    const droppedEssential = weekInstances.some((i) => i.priority === 'essential' && i.status === 'autoDropped')
-    const survivingLowerPriority = weekInstances.some((i) => i.priority !== 'essential' && !terminal.has(i.status) && i.scheduledDate !== null)
-    expect(droppedEssential && survivingLowerPriority).toBe(false)
+    const droppedEssentials = weekInstances.filter((i) => i.priority === 'essential' && i.status === 'autoDropped')
+    if (droppedEssentials.length === 0) continue
+    const scheduledLowerPriorityPeers = weekInstances.filter((i) => i.priority !== 'essential' && !terminal.has(i.status) && i.scheduledDate !== null)
+
+    for (const essential of droppedEssentials) {
+      for (const peer of scheduledLowerPriorityPeers) {
+        const withoutPeer = queueInput.templates.filter((t) => t.templateId !== peer.templateId)
+        const counterfactual = recomputeQueueImpl({ ...queueInput, templates: withoutPeer })
+        const essentialWithoutPeer = counterfactual.instances.find((i) => i.templateId === essential.templateId)
+        expect(essentialWithoutPeer?.scheduledDate ?? null).toBeNull()
+      }
+    }
   }
 }
 
@@ -583,7 +604,8 @@ describe('priority-tier placement resolves essential/lower-priority contention (
     const templates = [...fillers.map((f) => f.template), imp1, ess1]
     const events = fillers.map((f) => f.occupyingEvent)
 
-    const r = recomputeQueue(input({ templates, events, today: '2026-08-03', raceDate: '2027-01-16' }))
+    const queueInput = input({ templates, events, today: '2026-08-03', raceDate: '2027-01-16' })
+    const r = recomputeQueue(queueInput)
 
     expect(byId(r, 'ess1').scheduledDate).toBe('2026-08-10')
     expect(byId(r, 'imp1').status).toBe('autoDropped')
@@ -591,7 +613,7 @@ describe('priority-tier placement resolves essential/lower-priority contention (
     const text = r.explanations.map((e) => e.text).join(' | ')
     expect(text).toMatch(/Important spillover/)
     expect(text).toMatch(/Essential target/)
-    assertPriorityLadderInvariant(r)
+    assertNoCrowdOut(queueInput, r)
   })
 
   it('drops a same-week lower-priority peer too, when the essential cannot be rescued at all', () => {
@@ -599,12 +621,10 @@ describe('priority-tier placement resolves essential/lower-priority contention (
     // hard-blocked for the essential specifically (adjacent hardRun filler on
     // the Friday before it) — no reordering can place a `hardRun`-tagged
     // session there, so ess2 drops regardless of algorithm. `opt2` is native
-    // to week 2 (a *different* native week from ess2's week 1), so it is not
-    // gated by ess2's drop at all and schedules normally on its own week's
-    // free day (2026-08-15) — the priority ladder invariant is scoped to
-    // *same weekNumber* peers (asserted below), and correctly does not
-    // require sacrificing an unrelated week's optional for an essential in a
-    // different native week that it never actually contended with.
+    // to week 2 (a *different* native week from ess2's week 1), so it never
+    // contended with ess2 for anything and schedules normally on its own
+    // week's free day (2026-08-15) — not a crowd-out, since ess2's failure is
+    // caused entirely by frozen history in week 2, unrelated to opt2.
     const w1Fillers = [
       fillerSession('h1', 1, 1, '2026-08-03'),
       fillerSession('h2', 1, 2, '2026-08-04'),
@@ -627,32 +647,38 @@ describe('priority-tier placement resolves essential/lower-priority contention (
     const templates = [...fillers.map((f) => f.template), ess2, opt2]
     const events = fillers.map((f) => f.occupyingEvent)
 
-    const r = recomputeQueue(input({ templates, events, today: '2026-08-03', raceDate: '2027-01-16' }))
+    const queueInput = input({ templates, events, today: '2026-08-03', raceDate: '2027-01-16' })
+    const r = recomputeQueue(queueInput)
 
     expect(byId(r, 'ess2').status).toBe('autoDropped')
-    // opt2's own native week (2) has no dropped essential of its own, so it
-    // is placed normally — see comment above for why this is correct, not a
-    // priority-ladder violation.
+    // opt2 is placed normally — its own native week (2) has no relationship
+    // to ess2's failure (native week 1), so there is nothing for it to yield.
     expect(byId(r, 'opt2').scheduledDate).toBe('2026-08-15')
-    assertPriorityLadderInvariant(r)
+    assertNoCrowdOut(queueInput, r)
   })
 
-  it('never leaves an essential autoDropped while a same-native-week lower-priority peer is scheduled (Finding A counterexample)', () => {
-    // The exact shape from Finding A's brief: week 1 fully frozen; week 2
-    // Mon-Fri frozen with `lowerBodyStrength` (Saturday free); an essential
-    // (`ess3`, hardRun) and a lower-priority important (`imp3`, longRun) both
-    // *native to week 1*, the important later in sequence. ess3 fails its
-    // own week (full) and week 2's only free day, 2026-08-15, is hard-blocked
-    // for it (adjacent lowerBodyStrength -> hardRun) — no placement order can
-    // rescue it, since this is a tag conflict, not day contention. imp3 has
-    // no such conflict (no lowerBodyStrength -> longRun row) and *would*
-    // otherwise place at 2026-08-15 — exactly the violation Finding A
-    // describes (imp3, native to ess3's own week, ends up scheduled while
-    // ess3 sits dropped). Priority-tier placement's same-native-week guard
-    // (`weeksWithDroppedEssential` in `placement.ts`) is what stops this:
-    // once ess3's tier-processing turn is fully decided (dropped), imp3 —
-    // native to the same week — is never given the chance to place, even via
-    // its own escalation, and drops too.
+  it('does not sacrifice a same-native-week lower-priority peer when the essential was never crowded out by it (fix pass 3)', () => {
+    // The exact counterexample shape from Finding A's original brief: week 1
+    // fully frozen; week 2 Mon-Fri frozen with `lowerBodyStrength` (Saturday
+    // free); an essential (`ess3`, hardRun) and a lower-priority important
+    // (`imp3`, longRun) both *native to week 1*, the important later in
+    // sequence. ess3 fails its own week (full) and week 2's only free day,
+    // 2026-08-15, is hard-blocked for it specifically (adjacent
+    // lowerBodyStrength -> hardRun) — a tag conflict with *frozen history*,
+    // not day contention, so no placement order or priority rule can rescue
+    // it. imp3 has no such conflict (no lowerBodyStrength -> longRun row) and
+    // genuinely does place at 2026-08-15.
+    //
+    // Fix pass 2 treated this as a violation and added a guard that dropped
+    // imp3 too, "in solidarity" with ess3 — the coordinator's review (and my
+    // own flagged concern) correctly identified this as wrong: imp3 taking
+    // 2026-08-15 never cost ess3 anything, since ess3 could not have used
+    // that day regardless of imp3's presence. Dropping imp3 as well loses a
+    // second session for an athlete whose whole problem is fitting sessions
+    // into the week, with no corresponding benefit. The guard was removed;
+    // imp3 now places, and `assertNoCrowdOut` confirms below that this is not
+    // a crowd-out: removing imp3 from the input and recomputing still leaves
+    // ess3 unplaceable, proving imp3 was never in its way.
     const w1Fillers = [
       fillerSession('k1', 1, 1, '2026-08-03'),
       fillerSession('k2', 1, 2, '2026-08-04'),
@@ -675,21 +701,21 @@ describe('priority-tier placement resolves essential/lower-priority contention (
     const templates = [...fillers.map((f) => f.template), ess3, imp3]
     const events = fillers.map((f) => f.occupyingEvent)
 
-    const r = recomputeQueue(input({ templates, events, today: '2026-08-03', raceDate: '2027-01-16' }))
+    const queueInput = input({ templates, events, today: '2026-08-03', raceDate: '2027-01-16' })
+    const r = recomputeQueue(queueInput)
 
-    const essential = byId(r, 'ess3')
-    const important = byId(r, 'imp3')
-    // The invariant, not a specific outcome: either the essential succeeds,
-    // or — since it cannot here — the lower-priority peer must not be left
-    // scheduled either. (ess3 is, in fact, physically unplaceable in this
-    // exact fixture: 2026-08-15 hard-blocks `hardRun` regardless of ordering,
-    // so the second branch is the one that actually fires.)
-    if (essential.status === 'autoDropped') {
-      expect(important.scheduledDate).toBeNull()
-    } else {
-      expect(essential.scheduledDate).not.toBeNull()
-    }
-    assertPriorityLadderInvariant(r)
+    expect(byId(r, 'ess3').status).toBe('autoDropped')
+    expect(byId(r, 'imp3').scheduledDate).toBe('2026-08-15')
+
+    // Explicit counterfactual, spelled out inline (not just via the file-wide
+    // sweep) because this is the scenario that motivated the sweep's design:
+    // removing imp3 must not let ess3 place — if it did, imp3 really would
+    // have been crowding ess3 out, and this test's own premise would be wrong.
+    const withoutImp3 = queueInput.templates.filter((t) => t.templateId !== 'imp3')
+    const counterfactual = recomputeQueueImpl({ ...queueInput, templates: withoutImp3 })
+    expect(counterfactual.instances.find((i) => i.templateId === 'ess3')?.scheduledDate ?? null).toBeNull()
+
+    assertNoCrowdOut(queueInput, r)
   })
 })
 
@@ -735,12 +761,17 @@ describe('determinism and purity', () => {
 })
 
 describe('priority ladder invariant holds across every scenario in this file (Finding A, requirement 2)', () => {
-  it('never coexists an autoDropped essential with a scheduled lower-priority peer of the same weekNumber, in any recorded result', () => {
-    // `allResults` is populated by the `recomputeQueue` wrapper at the top of
+  it('never lets a lower-priority session crowd an essential out of a day it could have used, in any recorded run', () => {
+    // `allRuns` is populated by the `recomputeQueue` wrapper at the top of
     // this file, which every call site above (unchanged) transparently feeds
     // — this is a genuine file-wide sweep, not scoped to one fixture, and it
     // runs last (declaration order) so every scenario above has already run.
-    expect(allResults.length).toBeGreaterThan(0)
-    for (const r of allResults) assertPriorityLadderInvariant(r)
+    // `assertNoCrowdOut` is the causal check (fix pass 3): it does not merely
+    // check that no dropped essential coexists with any scheduled
+    // lower-priority peer (fix pass 2's over-broad reading) — it recomputes
+    // with each candidate peer removed and only fails if the essential would
+    // then place, i.e. the peer was genuinely in its way.
+    expect(allRuns.length).toBeGreaterThan(0)
+    for (const { input: queueInput, result } of allRuns) assertNoCrowdOut(queueInput, result)
   })
 })
