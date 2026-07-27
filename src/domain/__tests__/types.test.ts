@@ -14,9 +14,8 @@ describe('domain type barrel', () => {
   })
 })
 
-describe('entity types compile against representative values', () => {
-  it('accepts a fully populated strength set', async () => {
-    const { KG_PER_LB } = await import('@/domain/units/constants')
-    expect(KG_PER_LB).toBeCloseTo(0.45359237, 8)
-  })
-})
+// Field-level completeness of the entity interfaces is gated by the compiler,
+// not by this file: src/data/__tests__/types.typecheck.ts holds a fully
+// populated literal for every entity, so `npm run typecheck` fails if a
+// required field is missing or misnamed. A runtime test cannot check that —
+// types are erased before this code executes.

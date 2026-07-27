@@ -32,8 +32,13 @@ export interface AthleteProfile {
 
 export interface RaceGoal {
   id: string
-  /** Absent when training toward the plan's end without a booked race. */
-  raceDate?: ISODate
+  /**
+   * The date the plan is anchored to: week 24 is always the race week. Always
+   * present — onboarding requires choosing it, and every scheduling decision
+   * derives from it. Whether an actual race is booked on that date is a
+   * separate question the plan expresses through week 24's session content.
+   */
+  raceDate: ISODate
   targetSeconds: number
   stretchSeconds: number
   division: string

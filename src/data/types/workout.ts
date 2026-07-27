@@ -39,6 +39,16 @@ export interface WorkoutInstance {
  * A snapshot of a Prescription taken at scheduling time, so editing a
  * template never retroactively changes a scheduled or completed workout.
  */
+/**
+ * A point-in-time snapshot of a `Prescription`, taken when the instance is
+ * materialized. Editing a template must never retroactively change a scheduled
+ * or completed workout, which is why the values live here rather than being
+ * read through to the template.
+ *
+ * The inherited `templateId` is **provenance only**. Never use it to re-read
+ * current template or prescription state — doing so reintroduces exactly the
+ * retroactive-edit bug this snapshot exists to prevent.
+ */
 export interface InstancePrescription extends Prescription {
   instanceId: string
   /** Absent if the source prescription has since been deleted. */
