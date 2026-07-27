@@ -14,7 +14,7 @@
     "test:run": "vitest run",
     "e2e": "playwright test",
     "icons": "node scripts/generate-icons.mjs",
-    "postinstall": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/postinstall-junction.ps1",
+    "postinstall": "node scripts/postinstall.mjs",
     "fix-junction": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-windows.ps1"
   },
   "dependencies": {
