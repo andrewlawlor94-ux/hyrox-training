@@ -115,7 +115,7 @@ export function parseRaceTime(text: string): number | null {
   if (parts.some((p) => !isValidTimePart(p))) return null
   const nums = parts.map((p) => Number.parseInt(p, 10))
 
-  if (nums.length === 3) {
+  if (nums.length === RACE_TIME_MAX_PARTS) {
     const [h, m, s] = nums as [number, number, number]
     return h * SEC_PER_HOUR + m * SEC_PER_MIN + s
   }
