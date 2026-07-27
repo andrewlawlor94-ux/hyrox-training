@@ -21,7 +21,6 @@ const calm: RecommendationSymptomState = {
   shin: { level: 'green', spikeFlag: false, persistenceFlag: false },
   sciatic: { level: 'green', spikeFlag: false, persistenceFlag: false },
 }
-const bodyWeight = { value: 210, unit: 'lb' as const }
 const TODAY = '2026-08-24'
 
 function session(date: string, weight: number, reps: number, rir?: number): StrengthSessionHistory {
@@ -32,7 +31,7 @@ function session(date: string, weight: number, reps: number, rir?: number): Stre
 }
 
 function call(history: StrengthSessionHistory[], symptoms = calm) {
-  return recommendStrengthTarget({ exercise: squat, prescription: rx, history, symptoms, today: TODAY, profileBodyWeight: bodyWeight })
+  return recommendStrengthTarget({ exercise: squat, prescription: rx, history, symptoms, today: TODAY })
 }
 
 describe('no history', () => {
@@ -56,7 +55,7 @@ describe('no history and no prescription target', () => {
   it('falls back to the exercise default unit with a zero value and says so', () => {
     const r = recommendStrengthTarget({
       exercise: squat, prescription: { sets: 4, repMin: 5 },
-      history: [], symptoms: calm, today: TODAY, profileBodyWeight: bodyWeight,
+      history: [], symptoms: calm, today: TODAY,
     })
     expect(r.target).toEqual({ value: 0, unit: 'lb' })
     expect(r.mode).toBe('default')
@@ -159,6 +158,29 @@ describe('symptom gating (D2)', () => {
     const symptoms = { ...calm, sciatic: { level: 'caution' as const, spikeFlag: true, persistenceFlag: false } }
     expect(call([session('2026-08-17', 175, 5, 4)], symptoms).mode).toBe('symptomHold')
   })
+
+  it('holds the weight when shin symptoms are elevated on a shin-gated (plyo) exercise, naming the symptom', () => {
+    const boxJump: Exercise = { ...squat, id: 'ex_boxjump', name: 'Box jump', category: 'plyo' }
+    const symptoms = { ...calm, shin: { level: 'elevated' as const, spikeFlag: false, persistenceFlag: false } }
+    const r = recommendStrengthTarget({
+      exercise: boxJump, prescription: rx, history: [session('2026-08-17', 175, 5, 3)], symptoms, today: TODAY,
+    })
+    expect(r.mode).toBe('symptomHold')
+    expect(r.target).toEqual({ value: 175, unit: 'lb' })
+    expect(r.reason).toBe('Holding 175 lb while shin symptoms are elevated.')
+  })
+
+  it('still progresses an exercise gated by neither stream even when both shin and sciatic are elevated', () => {
+    const benchPress: Exercise = { ...squat, id: 'ex_bench', name: 'Bench press', category: 'press' }
+    const symptoms: RecommendationSymptomState = {
+      shin: { level: 'elevated', spikeFlag: false, persistenceFlag: false },
+      sciatic: { level: 'elevated', spikeFlag: false, persistenceFlag: false },
+    }
+    const r = recommendStrengthTarget({
+      exercise: benchPress, prescription: rx, history: [session('2026-08-17', 175, 5, 3)], symptoms, today: TODAY,
+    })
+    expect(r.mode).toBe('increase')
+  })
 })
 
 describe('last week vs most recent (§8)', () => {
@@ -197,7 +219,7 @@ describe('determinism and non-destructiveness', () => {
     const r = recommendStrengthTarget({
       exercise: sled, prescription: { sets: 6, repMin: 1, targetLoad: 152, loadUnit: 'kg' },
       history: [{ date: '2026-08-17', prescribedSets: 6, prescribedRepMin: 1, completedSets: [{ weight: 152, unit: 'kg', reps: 1, rir: 3 }] }],
-      symptoms: calm, today: TODAY, profileBodyWeight: bodyWeight,
+      symptoms: calm, today: TODAY,
     })
     expect(r.target).toEqual({ value: 152, unit: 'kg' })
   })

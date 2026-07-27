@@ -25,7 +25,7 @@ export interface StrengthRecommendation {
 /** Human-readable label for a symptom stream, used in the symptomHold reason. */
 const SYMPTOM_LABEL: Record<SymptomStream, string> = {
   sciatic: 'sciatic/back',
-  shin: 'shin/impact',
+  shin: 'shin',
 }
 
 // --- Local date arithmetic (do not create src/domain/dates.ts — a later
@@ -80,11 +80,27 @@ interface SessionSummary {
 }
 
 /**
- * Summarizes a session's performance. A normal working session prescribes
- * one weight and one rep target across all its sets, so the first completed
- * set is representative of the whole session; only the date meaningfully
- * varies across the history. Returns null for a session with no completed
- * sets at all (nothing usable to summarize).
+ * Summarizes a session's performance using its FIRST completed set,
+ * deliberately, not its heaviest. The seeded 24-week plan prescribes
+ * straight sets at one working weight (e.g. back squat 4x4-6 at a single
+ * load), so the first completed set already *is* the working weight — later
+ * sets don't add information for a straight-set session.
+ *
+ * The tempting alternative — "take the heaviest set" — is actively wrong for
+ * progression: an athlete who logs 175x5, 175x5, then a failed 180x2 (a
+ * one-off top-set attempt) would have `previous` read back as 180x2. The
+ * reps-missed branch would then fire on that top-set attempt, and the app
+ * would recommend repeating 180 lb next time instead of the 175 lb the
+ * athlete actually trained at. Taking the first set avoids that trap.
+ *
+ * Dependency this creates on the caller: `completedSets` must contain only
+ * *working* sets by the time it reaches this function — any warm-up sets
+ * must be filtered out upstream (this type has no `isWarmup` field to do it
+ * here). That filtering belongs to the repository/service layer that builds
+ * `StrengthSessionHistory` from logged sets, not to this pure function.
+ *
+ * Returns null for a session with no completed sets at all (nothing usable
+ * to summarize).
  */
 function summarizeSession(session: StrengthSessionHistory): SessionSummary | null {
   const firstSet = session.completedSets[0]
@@ -123,7 +139,6 @@ export function recommendStrengthTarget(ctx: {
   history: StrengthSessionHistory[]
   symptoms: RecommendationSymptomState
   today: ISODate
-  profileBodyWeight: Load
 }): StrengthRecommendation {
   const { exercise, prescription, history, symptoms, today } = ctx
 
