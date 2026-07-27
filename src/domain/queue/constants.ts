@@ -23,3 +23,24 @@ export const SLOT_DAY_OFFSET: Record<number, number> = {
   5: 4,
   6: 5,
 }
+
+/** Calendar days in one plan week — used to step from one week's Monday to
+ * the next. Kept distinct from `ROLLING_WINDOW_DAYS` even though the value
+ * is the same 7: one names a calendar week, the other a rest-day rolling
+ * window, and the two are free to diverge in a future revision. */
+export const DAYS_PER_WEEK = 7
+
+/**
+ * Automated placement (the queue engine's own catch-up/forward search) only
+ * ever proposes Monday-Saturday as a candidate day — Sunday is structurally
+ * reserved as the week's free day and is never offered by the search, only
+ * by a manual pinned override. This is what keeps a fully-packed week from
+ * silently consuming the plan's one guaranteed rest day, and is separate
+ * from (stricter than) the rolling rest-day rule in eligibility.ts.
+ */
+export const AUTOMATED_PLACEMENT_WEEKDAYS_PER_WEEK = 6
+
+/** Priority resolution order when an essential session must bump a
+ * lower-priority session to make room within its own week (§15): optional
+ * sessions give way before important ones. */
+export const BUMP_PRIORITY_ORDER: readonly ('optional' | 'important')[] = ['optional', 'important']
