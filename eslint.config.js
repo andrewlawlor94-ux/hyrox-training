@@ -56,6 +56,42 @@ export default tseslint.config(
     },
   },
   {
+    // The one sanctioned exception to the block above: src/domain/types.ts
+    // is the re-export barrel (Task 3) that lets the rest of the domain
+    // layer use entity types without reaching into @/data directly — see the
+    // comment in the previous block. `no-restricted-imports` applies to
+    // `export ... from` declarations, not just `import` statements, so the
+    // barrel's own `export type * from '@/data/types'` would otherwise trip
+    // the same rule it exists to route around. This override re-declares the
+    // same restriction with a single negation (`!@/data/types`, gitignore-
+    // style via the `ignore` package) so only that one path is unblocked,
+    // only for this one file — every other domain file is still fully
+    // covered by the block above and must import entity types via
+    // `@/domain/types`, not `@/data/types` directly.
+    //
+    // The bare form (`@/data`) has to move into `paths` (exact-match, not
+    // glob) rather than staying in the `group` array: verified empirically
+    // that when a bare directory pattern like `@/data` sits alongside
+    // `@/data/**` in the same `group`, the `ignore` package's gitignore
+    // semantics treat `@/data` as excluding the whole directory, and a
+    // negation can never re-include a path under an already-excluded parent
+    // — so `!@/data/types` was silently ignored. Splitting the exact bare
+    // form into `paths` (plain string equality, no cascade) sidesteps that
+    // rule entirely.
+    files: ['src/domain/types.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [
+          { name: '@/data', message: 'The barrel may only import @/data/types.' },
+        ],
+        patterns: [
+          { group: ['react', 'react-dom', 'dexie', 'dexie-react-hooks'], message: 'Domain layer must not depend on React or Dexie.' },
+          { group: ['@/data/**', '!@/data/types', '@/features', '@/features/**', '@/components', '@/components/**', '@/hooks', '@/hooks/**'], message: 'The barrel may only import @/data/types.' },
+        ],
+      }],
+    },
+  },
+  {
     files: ['**/__tests__/**', 'src/data/seed/**'],
     rules: {
       'no-magic-numbers': 'off',

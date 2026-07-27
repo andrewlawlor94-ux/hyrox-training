@@ -50,11 +50,30 @@ describe('domain layer purity', () => {
     ['uses Math.random', /Math\.random\s*\(/],
     ['imports React', reactPattern],
     ['imports Dexie', dexiePattern],
-    ['imports the data layer', dataLayerPattern],
     ['imports the UI layer', uiLayerPattern],
   ])('no domain file %s', (_label, pattern) => {
     const offenders = files.filter((f) => pattern.test(readFileSync(f, 'utf8')))
     expect(offenders).toEqual([])
+  })
+
+  // 'imports the data layer' gets its own assertion (rather than sharing the
+  // it.each above) because of a single sanctioned exception: src/domain/
+  // types.ts (Task 3) is the re-export barrel that lets every other domain
+  // file use entity types without reaching into @/data directly (see
+  // eslint.config.js). Its own `export type * from '@/data/types'` line
+  // necessarily matches dataLayerPattern, so it's excluded by path here —
+  // every other file under src/domain/** is still checked.
+  it('no domain file imports the data layer, except the re-export barrel', () => {
+    const typesBarrel = join(process.cwd(), 'src', 'domain', 'types.ts')
+    const offenders = files.filter((f) => f !== typesBarrel && dataLayerPattern.test(readFileSync(f, 'utf8')))
+    expect(offenders).toEqual([])
+  })
+
+  it('the re-export barrel imports only @/data/types, nothing else from @/data', () => {
+    const typesBarrel = join(process.cwd(), 'src', 'domain', 'types.ts')
+    const content = readFileSync(typesBarrel, 'utf8')
+    const dataImports = content.match(/from\s+['"]@\/data[^'"]*['"]/g) ?? []
+    expect(dataImports).toEqual(["from '@/data/types'"])
   })
 })
 
