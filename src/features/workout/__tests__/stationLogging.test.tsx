@@ -102,6 +102,42 @@ describe('station logging', () => {
     expect(screen.getByText(/friction/i)).toBeInTheDocument()
   })
 
+  it('offers sled floor surfaces (turf/rubber/concrete/other), never the run surfaces, for both sled stations', async () => {
+    const instanceId = await createStationWorkout(['ex_sled_push', 'ex_sled_pull'])
+    await renderWorkout(instanceId)
+    await screen.findByText('Sled push')
+
+    for (const label of ['Turf', 'Rubber / gym floor', 'Concrete', 'Other']) {
+      expect(screen.getAllByText(label)).toHaveLength(2) // one per sled station
+    }
+    // Sled friction is a floor property, not a running surface -- these two
+    // values are meaningless for a sled and must never appear as options here.
+    expect(screen.queryByText('Treadmill')).toBeNull()
+    expect(screen.queryByText('Track')).toBeNull()
+  })
+
+  it('saves the chosen sled floor surface onto the StationLog', async () => {
+    const instanceId = await createStationWorkout(['ex_sled_push'])
+    await renderWorkout(instanceId)
+    await screen.findByText('Sled push')
+
+    fireEvent.click(screen.getByText('Concrete'))
+
+    await waitFor(async () => {
+      const logs = await db.stationLogs.where('instanceId').equals(instanceId).toArray()
+      expect(logs).toHaveLength(1)
+      expect(logs[0]?.surface).toBe('concrete')
+    })
+  })
+
+  it('does not render a Surface control for a non-sled station', async () => {
+    const instanceId = await createStationWorkout(['ex_row'])
+    await renderWorkout(instanceId)
+    await screen.findByText('Row')
+
+    expect(screen.queryByText('Surface')).toBeNull()
+  })
+
   it('defaults wall balls to 100 reps, 6 kg, and shows the 3.0 m target with the overhead-clearance note', async () => {
     const instanceId = await createStationWorkout(['ex_wall_ball'])
     await renderWorkout(instanceId)

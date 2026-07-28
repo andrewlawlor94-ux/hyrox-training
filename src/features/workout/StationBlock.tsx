@@ -1,6 +1,6 @@
 import type { ChangeEvent, FC } from 'react'
 import { useState } from 'react'
-import type { StationLog, Surface } from '@/data/types'
+import type { SledSurface, StationLog } from '@/data/types'
 import { Card, NumberField } from '@/components'
 import { saveStationLog } from '@/data/repositories'
 import { formatWithEquivalent } from '@/domain/units/format'
@@ -10,7 +10,7 @@ import { SledFields } from './SledFields'
 import { useAutosave } from './useAutosave'
 import type { StationExerciseVM } from './useWorkout'
 
-const DEFAULT_SURFACE: Surface = 'other'
+const DEFAULT_SLED_SURFACE: SledSurface = 'other'
 
 interface StationFields {
   distanceM: number | null
@@ -23,7 +23,7 @@ interface StationFields {
   notes: string
   totalLoadKg: number | null
   sledWeightKg: number | null
-  surface: Surface
+  surface: SledSurface
 }
 
 function initialFields(item: StationExerciseVM): StationFields {
@@ -39,7 +39,7 @@ function initialFields(item: StationExerciseVM): StationFields {
     notes: log?.notes ?? '',
     totalLoadKg: log?.totalLoadKg ?? null,
     sledWeightKg: log?.sledWeightKg ?? null,
-    surface: log?.surface ?? DEFAULT_SURFACE,
+    surface: log?.surface ?? DEFAULT_SLED_SURFACE,
   }
 }
 

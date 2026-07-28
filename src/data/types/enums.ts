@@ -34,6 +34,15 @@ export type RunType =
 
 export type Surface = 'track' | 'treadmill' | 'road' | 'other'
 
+/** The floor a sled is pushed/pulled across (§ sled surface fix). Distinct
+ * from `Surface`, which describes a RUN's terrain (track/treadmill/road) —
+ * those values are meaningless for a sled (a sled is never run on a
+ * treadmill) and this union is meaningless for a run in the other direction.
+ * Sled friction varies enormously by floor, which is why the sled blocks
+ * already warn that cross-venue times aren't comparable; these are the floor
+ * types that actually drive that friction. */
+export type SledSurface = 'turf' | 'rubber' | 'concrete' | 'other'
+
 export type SplitKind = 'warmup' | 'work' | 'recovery' | 'cooldown'
 
 export type SymptomLevel = 'green' | 'caution' | 'elevated'

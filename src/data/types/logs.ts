@@ -1,5 +1,5 @@
 import type { ISODate, ISOInstant, Unit } from './primitives'
-import type { RunType, SplitKind, Station, Surface } from './enums'
+import type { RunType, SledSurface, SplitKind, Station, Surface } from './enums'
 
 /** A single logged set. All fields are optional except identity and flags —
  * a set exists (and can be idempotently targeted for completion) before it
@@ -54,7 +54,9 @@ export interface StationLog {
   loadUnit?: Unit
   sledWeightKg?: number
   totalLoadKg?: number
-  surface?: Surface
+  /** Only ever set for the two sled stations (see `StationBlock`) — the floor
+   * the sled ran on, not a `Surface` (which describes a run's terrain). */
+  surface?: SledSurface
   timeSec?: number
   breaks?: number
   setStructure?: string

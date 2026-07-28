@@ -1,4 +1,4 @@
-import type { RunType, Station, Surface } from '@/data/types'
+import type { RunType, SledSurface, Station, Surface } from '@/data/types'
 
 /** Autosave debounce window: a field commits this long after the last
  * keystroke if nothing else (blur, visibilitychange, unmount) flushes it
@@ -30,6 +30,16 @@ export const SURFACE_OPTIONS: { value: Surface; label: string }[] = [
   { value: 'track', label: 'Track' },
   { value: 'treadmill', label: 'Treadmill' },
   { value: 'road', label: 'Road' },
+  { value: 'other', label: 'Other' },
+]
+
+/** Every `SledSurface` value, shared by the two sled stations (`SledFields`)
+ * — deliberately a different vocabulary from `SURFACE_OPTIONS`: a sled is
+ * pushed/pulled across a floor, never "run" on a track or treadmill. */
+export const SLED_SURFACE_OPTIONS: { value: SledSurface; label: string }[] = [
+  { value: 'turf', label: 'Turf' },
+  { value: 'rubber', label: 'Rubber / gym floor' },
+  { value: 'concrete', label: 'Concrete' },
   { value: 'other', label: 'Other' },
 ]
 

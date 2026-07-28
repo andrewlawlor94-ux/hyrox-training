@@ -1,16 +1,16 @@
 import type { FC } from 'react'
-import type { Surface } from '@/data/types'
+import type { SledSurface } from '@/data/types'
 import { NumberField, SegmentedControl } from '@/components'
-import { SURFACE_OPTIONS } from './constants'
+import { SLED_SURFACE_OPTIONS } from './constants'
 
 interface SledFieldsProps {
   idPrefix: string
   totalLoadKg: number | null
   sledWeightKg: number | null
-  surface: Surface
+  surface: SledSurface
   onChangeTotalLoad: (value: number | null) => void
   onChangeSledWeight: (value: number | null) => void
-  onChangeSurface: (value: Surface) => void
+  onChangeSurface: (value: SledSurface) => void
   onBlur: () => void
   /** The seeded standard's own `notes` text — always renders the friction
    * caveat verbatim rather than a paraphrase, since a slower time on a
@@ -44,7 +44,7 @@ export const SledFields: FC<SledFieldsProps> = ({
         onBlur={onBlur}
       />
     </div>
-    <SegmentedControl label="Surface" value={surface} onChange={onChangeSurface} options={SURFACE_OPTIONS} />
+    <SegmentedControl label="Surface" value={surface} onChange={onChangeSurface} options={SLED_SURFACE_OPTIONS} />
     {frictionNote && <p className="sled-fields__note">{frictionNote}</p>}
   </div>
 )
