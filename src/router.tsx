@@ -27,7 +27,18 @@ export const AppRoutes: FC = () => (
         </ErrorBoundary>
       )}
     />
-    <Route element={<AppShell />}>
+    {/* AppShell itself (the layout element, not just its route children) is
+      * wrapped: it renders `useSettings()`, and any error there — or
+      * anywhere else inside the shell that isn't already caught by a more
+      * specific boundary below — would otherwise take the whole app down
+      * to a blank page with no boundary above it to catch it. */}
+    <Route
+      element={(
+        <ErrorBoundary>
+          <AppShell />
+        </ErrorBoundary>
+      )}
+    >
       <Route
         path="/"
         element={(

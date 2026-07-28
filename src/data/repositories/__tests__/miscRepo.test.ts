@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db, resetDatabase } from '@/data/db'
-import { getProfile } from '../profileRepo'
+import { ensureProfile, getProfile, readProfile } from '../profileRepo'
 import { getActiveGoal, setRaceGoal } from '../goalRepo'
-import { getSettings } from '../settingsRepo'
+import { ensureSettings, getSettings, readSettings } from '../settingsRepo'
 import { listEvents } from '../scheduleRepo'
 
 const NOW = '2026-07-27T10:00:00.000Z'
@@ -25,6 +25,23 @@ describe('profileRepo', () => {
     await getProfile('2026-07-27T11:00:00.000Z')
     expect(await db.athleteProfile.count()).toBe(1)
   })
+
+  it('readProfile never writes: returns undefined on an empty table and leaves it empty', async () => {
+    expect(await readProfile()).toBeUndefined()
+    expect(await db.athleteProfile.count()).toBe(0)
+  })
+
+  it('ensureProfile persists the row exactly once; readProfile then sees it without writing again', async () => {
+    const created = await ensureProfile(NOW)
+    expect(await db.athleteProfile.count()).toBe(1)
+
+    const readBack = await readProfile()
+    expect(readBack).toEqual(created)
+    expect(await db.athleteProfile.count()).toBe(1)
+
+    await ensureProfile('2026-07-27T11:00:00.000Z')
+    expect(await db.athleteProfile.count()).toBe(1)
+  })
 })
 
 describe('settingsRepo', () => {
@@ -33,6 +50,31 @@ describe('settingsRepo', () => {
     const settings = await getSettings()
     expect(settings.id).toBe('app')
     expect(await db.settings.count()).toBe(1)
+  })
+
+  it('readSettings never writes: returns an in-memory default on an empty table and leaves it empty', async () => {
+    const settings = await readSettings()
+    expect(settings.id).toBe('app')
+    expect(await db.settings.count()).toBe(0)
+  })
+
+  it('ensureSettings persists the row exactly once; readSettings then sees the same row without writing again', async () => {
+    const created = await ensureSettings()
+    expect(await db.settings.count()).toBe(1)
+
+    const readBack = await readSettings()
+    expect(readBack).toEqual(created)
+    expect(await db.settings.count()).toBe(1)
+
+    await ensureSettings()
+    expect(await db.settings.count()).toBe(1)
+  })
+
+  it('pins the spec-mandated defaults: rest sound/vibration off, station unit metric', async () => {
+    const settings = await ensureSettings()
+    expect(settings.restSoundEnabled).toBe(false)
+    expect(settings.restVibrationEnabled).toBe(false)
+    expect(settings.stationUnit).toBe('kg')
   })
 })
 

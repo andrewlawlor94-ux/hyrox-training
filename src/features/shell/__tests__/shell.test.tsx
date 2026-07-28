@@ -112,6 +112,19 @@ describe('app shell', () => {
     expect(screen.queryByRole('navigation', { name: /primary/i })).toBeNull()
   })
 
+  it('boots against a genuinely empty database (no seedTestDb, no repository pre-calls) and renders onboarding', async () => {
+    // Deliberately nothing else here — `beforeEach` already ran
+    // `resetDatabase()`. This is the real first-run path: `BootGate` opens
+    // the db, seeds the exercise/standards library, and ensures the
+    // settings row exists; `AppShell` then reads settings through
+    // `useSettings`'s live query and must not crash reading a table it has
+    // never written to as part of that query.
+    renderApp({ route: '/' })
+
+    await screen.findByRole('heading', { name: /race date/i })
+    expect(document.body.textContent).not.toBe('')
+  })
+
   it('renders Home without redirecting when onboardingCompletedAt is set', async () => {
     await seedTestDb()
     await updateSettings({ onboardingCompletedAt: NOW })
