@@ -1,15 +1,14 @@
 import type { FC } from 'react'
-import { useState } from 'react'
-import { Button, Card, NumberField } from '@/components'
-import { addSet, removeSet, saveStationLog, upsertSet } from '@/data/repositories'
-import type { StationLog } from '@/data/types'
+import { Button, Card } from '@/components'
+import { addSet, removeSet, upsertSet } from '@/data/repositories'
 import { useRestTimer } from '@/features/timer/useRestTimer'
-import { STATION_BY_EXERCISE_ID } from './constants'
 import { hasUnknownLoad } from './loadPresentation'
+import { RunBlock } from './RunBlock'
 import { SetRow } from './SetRow'
+import { StationBlock } from './StationBlock'
 import { TargetHeader } from './TargetHeader'
 import { useAutosave } from './useAutosave'
-import type { StationExerciseVM, StrengthExerciseVM, WorkoutExerciseVM } from './useWorkout'
+import type { StrengthExerciseVM, WorkoutExerciseVM } from './useWorkout'
 
 /** Logs rather than rethrows: every call site below is a fire-and-forget
  * write triggered from a click handler, with no `await`er left to hand a
@@ -99,69 +98,11 @@ const StrengthCard: FC<StrengthCardProps> = ({ item }) => {
   )
 }
 
-interface StationCardProps {
-  item: StationExerciseVM
+/** Routes each prescribed exercise to its logging block: strength sets,
+ * a run (distance/duration/pace/splits — `RunBlock`), or a HYROX station
+ * (`StationBlock`, including the sled/wall-ball specifics). */
+export const ExerciseCard: FC<{ item: WorkoutExerciseVM }> = ({ item }) => {
+  if (item.kind === 'strength') return <StrengthCard item={item} />
+  if (item.kind === 'run') return <RunBlock item={item} />
+  return <StationBlock item={item} />
 }
-
-/** Generic distance/load/time/RPE fields for the eight HYROX-standard
- * stations and any other non-strength-set exercise. Full-fidelity run
- * logging with splits (RunLog/IntervalSplit) is a separate, later feature —
- * this is the honest minimum for "a station exercise renders station fields
- * rather than weight/reps" (§8's station bullet), not a stand-in for it. */
-const StationCard: FC<StationCardProps> = ({ item }) => {
-  const { prescription, exercise } = item
-  const autosave = useAutosave()
-  const [distanceM, setDistanceM] = useState<number | null>(item.log?.distanceM ?? prescription.distanceM ?? null)
-  const [load, setLoad] = useState<number | null>(item.log?.load ?? prescription.targetLoad ?? null)
-  const [timeSec, setTimeSec] = useState<number | null>(item.log?.timeSec ?? null)
-  const [rpe, setRpe] = useState<number | null>(item.log?.rpe ?? null)
-
-  const station = STATION_BY_EXERCISE_ID[exercise.id]
-
-  function scheduleSave(patch: Partial<{ distanceM: number | null; load: number | null; timeSec: number | null; rpe: number | null }>): void {
-    if (!station) return
-    const merged = {
-      distanceM: patch.distanceM !== undefined ? patch.distanceM : distanceM,
-      load: patch.load !== undefined ? patch.load : load,
-      timeSec: patch.timeSec !== undefined ? patch.timeSec : timeSec,
-      rpe: patch.rpe !== undefined ? patch.rpe : rpe,
-    }
-    autosave.schedule(prescription.id, async () => {
-      const log: StationLog = {
-        id: item.log?.id ?? `sl_${prescription.id}`,
-        instanceId: prescription.instanceId,
-        instancePrescriptionId: prescription.id,
-        station,
-        notes: item.log?.notes ?? '',
-        ...(merged.distanceM !== null ? { distanceM: merged.distanceM } : {}),
-        ...(merged.load !== null ? { load: merged.load, loadUnit: prescription.loadUnit ?? exercise.defaultUnit } : {}),
-        ...(merged.timeSec !== null ? { timeSec: merged.timeSec } : {}),
-        ...(merged.rpe !== null ? { rpe: merged.rpe } : {}),
-      }
-      await saveStationLog(log)
-    })
-  }
-
-  function handleBlur(): void { void autosave.flushKey(prescription.id) }
-
-  return (
-    <Card as="article" className="exercise-card">
-      <h3 className="exercise-card__name">{exercise.name}</h3>
-      <div className="exercise-card__station-fields">
-        <NumberField id={`station-distance-${prescription.id}`} label="Distance" value={distanceM} unit="m" onBlur={handleBlur}
-          onChange={(v) => { setDistanceM(v); scheduleSave({ distanceM: v }) }} />
-        <NumberField id={`station-load-${prescription.id}`} label="Load" value={load} unit={exercise.defaultUnit} onBlur={handleBlur}
-          onChange={(v) => { setLoad(v); scheduleSave({ load: v }) }} />
-        <NumberField id={`station-time-${prescription.id}`} label="Time" value={timeSec} unit="s" onBlur={handleBlur}
-          onChange={(v) => { setTimeSec(v); scheduleSave({ timeSec: v }) }} />
-        <NumberField id={`station-rpe-${prescription.id}`} label="RPE" value={rpe} onBlur={handleBlur}
-          onChange={(v) => { setRpe(v); scheduleSave({ rpe: v }) }} />
-      </div>
-      {prescription.notes && <p className="exercise-card__notes">{`Notes: ${prescription.notes}`}</p>}
-    </Card>
-  )
-}
-
-export const ExerciseCard: FC<{ item: WorkoutExerciseVM }> = ({ item }) => (
-  item.kind === 'strength' ? <StrengthCard item={item} /> : <StationCard item={item} />
-)

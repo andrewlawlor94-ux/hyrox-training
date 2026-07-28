@@ -1,12 +1,16 @@
 import { useEffect, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/data/db'
-import { exerciseHistory, getInstanceWithPrescriptions, listSymptomLogs, startWorkout } from '@/data/repositories'
-import type { Exercise, InstancePrescription, StationLog, StrengthSet, WorkoutInstance } from '@/data/types'
+import { exerciseHistory, getActiveGoal, getInstanceWithPrescriptions, listSymptomLogs, startWorkout } from '@/data/repositories'
+import type {
+  Exercise, HyroxStandard, InstancePrescription, IntervalSplit, RunLog, StationLog, StrengthSet, WorkoutInstance,
+} from '@/data/types'
 import type { ISODate } from '@/domain/types'
 import { evaluateSymptoms } from '@/domain/symptoms/evaluate'
+import { goalTargets } from '@/domain/milestones/goalTargets'
 import { recommendStrengthTarget } from '@/domain/recommendations/strengthTarget'
 import type { StrengthRecommendation, StrengthSessionHistory } from '@/domain/recommendations/strengthTarget'
+import { STATION_BY_EXERCISE_ID } from './constants'
 
 export interface StrengthExerciseVM {
   kind: 'strength'
@@ -27,9 +31,25 @@ export interface StationExerciseVM {
   prescription: InstancePrescription
   exercise: Exercise
   log: StationLog | undefined
+  /** The seeded (and athlete-editable) Men's Open reference for this
+   * station, or `undefined` for an exercise with no `Station` mapping. */
+  standard: HyroxStandard | undefined
 }
 
-export type WorkoutExerciseVM = StrengthExerciseVM | StationExerciseVM
+export interface RunExerciseVM {
+  kind: 'run'
+  prescription: InstancePrescription
+  exercise: Exercise
+  log: RunLog | undefined
+  splits: IntervalSplit[]
+  /** Resolved target pace for a `paceSource: 'goalRacePace'` prescription —
+   * the goal-derived compromised-km pace, re-derived from whatever race goal
+   * is currently active rather than ever being a stored literal. `null` when
+   * the prescription isn't goal-paced or there is no active goal yet. */
+  goalTargetPaceSecPerKm: number | null
+}
+
+export type WorkoutExerciseVM = StrengthExerciseVM | StationExerciseVM | RunExerciseVM
 
 export interface WorkoutData {
   instance: WorkoutInstance
@@ -79,11 +99,24 @@ function targetRepsFor(recommendation: StrengthRecommendation, prescription: Ins
  * — `getInstanceWithPrescriptions`, `db.exercises.get`, `db.strengthSets`/
  * `db.stationLogs` queries, `exerciseHistory`, `listSymptomLogs`,
  * `evaluateSymptoms`, `recommendStrengthTarget` — only ever reads. */
+/** Resolves a goal-paced prescription's live target, or `null` when the
+ * prescription is manually paced or no race goal is active yet. The
+ * compromised-km target IS the per-km race pace `goalTargets` derives (see
+ * its own doc comment) — exactly what every seeded `paceSource:
+ * 'goalRacePace'` run prescription in this plan means by "goal pace". */
+async function resolveGoalTargetPace(prescription: InstancePrescription): Promise<number | null> {
+  if (prescription.paceSource !== 'goalRacePace') return prescription.targetPaceSecPerKm ?? null
+  const goal = await getActiveGoal()
+  if (!goal) return null
+  return goalTargets(goal.targetSeconds).compromisedKmTargetSec
+}
+
 async function loadWorkout(instanceId: string, today: ISODate): Promise<WorkoutData | undefined> {
   const loaded = await getInstanceWithPrescriptions(instanceId)
   if (!loaded) return undefined
   const { instance, prescriptions } = loaded
   const template = await db.workoutTemplates.get(instance.templateId)
+  const standards = await db.hyroxStandards.toArray()
 
   const exercises: WorkoutExerciseVM[] = []
   for (const prescription of prescriptions) {
@@ -97,14 +130,21 @@ async function loadWorkout(instanceId: string, today: ISODate): Promise<WorkoutD
         kind: 'strength', prescription, exercise, sets, recommendation,
         targetReps: targetRepsFor(recommendation, prescription, exercise),
       })
+    } else if (exercise.category === 'run') {
+      // `runLogs` indexes `instanceId`, not `instancePrescriptionId` (see
+      // src/data/schema.ts) — same filter-in-JS pattern the station branch
+      // below (and workoutRepo.nextSetIndex) already uses for that reason.
+      const instanceLogs = await db.runLogs.where('instanceId').equals(prescription.instanceId).toArray()
+      const log = instanceLogs.find((l) => l.instancePrescriptionId === prescription.id)
+      const splits = log ? await db.intervalSplits.where('runLogId').equals(log.id).sortBy('index') : []
+      const goalTargetPaceSecPerKm = await resolveGoalTargetPace(prescription)
+      exercises.push({ kind: 'run', prescription, exercise, log, splits, goalTargetPaceSecPerKm })
     } else {
-      // `stationLogs` indexes `instanceId`, not `instancePrescriptionId`
-      // (see src/data/schema.ts) — filter in JS rather than adding a new
-      // index, matching the pattern `workoutRepo.nextSetIndex` already uses
-      // for the same reason.
       const instanceLogs = await db.stationLogs.where('instanceId').equals(prescription.instanceId).toArray()
       const log = instanceLogs.find((l) => l.instancePrescriptionId === prescription.id)
-      exercises.push({ kind: 'station', prescription, exercise, log })
+      const stationKey = STATION_BY_EXERCISE_ID[exercise.id]
+      const standard = stationKey ? standards.find((s) => s.station === stationKey) : undefined
+      exercises.push({ kind: 'station', prescription, exercise, log, standard })
     }
   }
 

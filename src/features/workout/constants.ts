@@ -1,4 +1,4 @@
-import type { Station } from '@/data/types'
+import type { RunType, Station, Surface } from '@/data/types'
 
 /** Autosave debounce window: a field commits this long after the last
  * keystroke if nothing else (blur, visibilitychange, unmount) flushes it
@@ -22,6 +22,36 @@ export const STATION_BY_EXERCISE_ID: Readonly<Record<string, Station>> = {
   ex_farmer_carry: 'farmerCarry',
   ex_sandbag_lunge: 'sandbagLunge',
   ex_wall_ball: 'wallBalls',
+}
+
+/** Every `Surface` value, shared by `RunBlock` and `SledFields` so the two
+ * pickers never drift apart. */
+export const SURFACE_OPTIONS: { value: Surface; label: string }[] = [
+  { value: 'track', label: 'Track' },
+  { value: 'treadmill', label: 'Treadmill' },
+  { value: 'road', label: 'Road' },
+  { value: 'other', label: 'Other' },
+]
+
+/** Every `RunType` value, always offered in full regardless of which run
+ * exercise is prescribed — the athlete's own choice, not derived silently. */
+export const RUN_TYPE_OPTIONS: { value: RunType; label: string }[] = [
+  { value: 'easy', label: 'Easy' },
+  { value: 'long', label: 'Long' },
+  { value: 'tempo', label: 'Tempo' },
+  { value: 'intervals', label: 'Intervals' },
+  { value: 'compromised', label: 'Compromised' },
+  { value: 'benchmark', label: 'Benchmark' },
+  { value: 'race', label: 'Race' },
+]
+
+/** Default `RunType` per seeded run exercise, used only as a starting value
+ * — the athlete can always change it via the full `RUN_TYPE_OPTIONS` set. */
+export const DEFAULT_RUN_TYPE_BY_EXERCISE_ID: Readonly<Record<string, RunType>> = {
+  ex_easy_run: 'easy',
+  ex_long_run: 'long',
+  ex_quality_run: 'tempo',
+  ex_compromised_run: 'compromised',
 }
 
 /** Month abbreviations for the "Jul 20" short-date format used in the

@@ -342,17 +342,22 @@ describe('strength logging screen', () => {
     expect(screen.getByText(/sciatic/i)).toBeInTheDocument()
   })
 
-  it('renders station fields (distance, load, time, RPE) instead of weight/reps for a station exercise', async () => {
+  it('renders station fields (distance, load, time, RPE) instead of a strength set row for a station exercise', async () => {
     const instanceId = await createWorkout([{ exerciseId: 'ex_sled_push' }])
     await renderWorkout(instanceId)
 
     expect(await screen.findByText('Sled push')).toBeInTheDocument()
-    expect(screen.getByLabelText(/distance/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('Distance')).toBeInTheDocument()
     expect(screen.getByLabelText(/^load/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^time/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/rpe/i)).toBeInTheDocument()
-    expect(screen.queryByLabelText(/weight/i)).toBeNull()
-    expect(screen.queryByLabelText(/^reps/i)).toBeNull()
+    // A strength SetRow's per-set fields ("Weight, set 1", "Reps, set 1")
+    // never render for a station — this is what actually distinguishes a
+    // station block from a strength card. A station's OWN generic "Reps"
+    // field and (for sled stations) "Sled weight"/"Total loaded weight"
+    // fields are expected here (Task 22) and are not the same thing.
+    expect(screen.queryByLabelText(/weight, set/i)).toBeNull()
+    expect(screen.queryByLabelText(/reps, set/i)).toBeNull()
   })
 
   it('has no horizontal scrollbar at a 375px viewport', async () => {
