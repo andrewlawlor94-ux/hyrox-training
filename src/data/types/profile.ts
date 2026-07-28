@@ -14,6 +14,14 @@ export interface AppSettings {
   /** Absent until the onboarding wizard finishes. */
   onboardingCompletedAt?: ISOInstant
   dismissedSubstitutions: string[]
+  /** Set when the athlete answers "yes" to any red-flag screening question
+   * (see `@/domain/symptoms/redFlags`). Present so the urgent safety card
+   * persists on Home across navigation/reloads until explicitly dismissed.
+   * Absent (never written) until the first time it's raised; explicitly
+   * `null` once dismissed — `exactOptionalPropertyTypes` forbids writing
+   * `undefined` to an optional property, so `null` is the only way to
+   * represent "raised, then cleared" without ever being a stale timestamp. */
+  urgentRedFlagAt?: ISOInstant | null
 }
 
 /** Singleton athlete profile row, id: 'me'. Onboarding fields are skippable,

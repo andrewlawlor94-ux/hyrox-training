@@ -1,9 +1,18 @@
 import { db } from '@/data/db'
 import type { ISODate, ISOInstant, InstancePrescription, StrengthSet, WorkoutInstance } from '@/data/types'
+import type { SubstitutionKind } from '@/domain/symptoms/substitutions'
 import { assertMutable } from './guard'
 import { appendEvent } from './scheduleRepo'
 import { getSettings } from './settingsRepo'
 import { newId } from './ids'
+
+/** `reduceImpactVolume` cuts an instance's prescribed run distance by this
+ * fraction — 25% sits in the middle of the domain copy's stated 20-30% band
+ * (see `@/domain/symptoms/substitutions`'s `reduceImpactVolume` detail text). */
+const IMPACT_REDUCTION_FACTOR = 0.75
+/** `swapHardRunForLowImpact` retargets a run prescription at this exercise —
+ * matches the domain copy's own "SkiErg or rowing" wording. */
+const LOW_IMPACT_SWAP_EXERCISE_ID = 'ex_ski_erg'
 
 export async function getTodaysWorkout(today: ISODate): Promise<WorkoutInstance | undefined> {
   const settings = await getSettings()
@@ -56,6 +65,90 @@ export async function completeWorkout(args: { id: string; state: 'completed' | '
       payload: { forDate: args.forDate },
     })
   })
+}
+
+/**
+ * Records a backdated completion: the athlete is logging a session that
+ * actually happened on an earlier date. Distinct from `completeWorkout`'s
+ * `'completed'` path (which stamps `forDate` as today) so replay (§ D11,
+ * `@/domain/queue/replay.ts`) can tell "missed then logged after the fact"
+ * apart from an on-time completion — `COMPLETE_EARLIER` is what lets the
+ * placement engine treat the backdated day as occupied and potentially
+ * reshuffle whatever else was scheduled there, which is exactly why callers
+ * must follow this with `syncQueue`.
+ */
+export async function completeWorkoutEarlier(args: { id: string; forDate: ISODate; now: ISOInstant }): Promise<void> {
+  await db.transaction('rw', db.workoutInstances, db.scheduleEvents, async () => {
+    const instance = await loadInstanceOrThrow(args.id)
+    assertMutable(instance)
+    await db.workoutInstances.put({
+      ...instance, status: 'completed', completedAt: args.now, completedForDate: args.forDate, frozen: true,
+    })
+    await appendEvent({
+      at: args.now, type: 'COMPLETE_EARLIER', instanceId: instance.templateId, payload: { forDate: args.forDate },
+    })
+  })
+}
+
+/** Appends a `DEFER` event; does not freeze or otherwise directly touch the
+ * instance row — the queue engine's own replay (`@/domain/queue/replay.ts`)
+ * is what turns a `DEFER` event into a `deferred` status and a rescheduled
+ * date, on the next `syncQueue` call. */
+export async function deferWorkout(args: { id: string; now: ISOInstant }): Promise<void> {
+  const instance = await loadInstanceOrThrow(args.id)
+  assertMutable(instance)
+  await appendEvent({ at: args.now, type: 'DEFER', instanceId: instance.templateId, payload: {} })
+}
+
+/** Appends a `SKIP` event; same division of labour as `deferWorkout` — the
+ * queue engine's replay derives the `skipped` status from event history, not
+ * a direct write here. */
+export async function skipWorkout(args: { id: string; now: ISOInstant }): Promise<void> {
+  const instance = await loadInstanceOrThrow(args.id)
+  assertMutable(instance)
+  await appendEvent({ at: args.now, type: 'SKIP', instanceId: instance.templateId, payload: {} })
+}
+
+/**
+ * Accepts a symptom-driven `Substitution` (see `@/domain/symptoms/substitutions`)
+ * by mutating ONLY this instance's own `InstancePrescription` rows — never
+ * the `Prescription` template rows a future instance would materialize
+ * from — so accepting a suggestion for this week never silently changes
+ * every future week's plan. Kinds with no instance-level prescription change
+ * (holding load progression is already handled by the recommendation engine
+ * reading symptom state directly; seeking assessment / stopping an exercise
+ * are informational) are a documented no-op here — accepting them is still a
+ * real action from the athlete's point of view (dismissing the suggestion),
+ * just not one that touches `InstancePrescription` rows.
+ */
+export async function applySubstitution(
+  args: { instanceId: string; kind: SubstitutionKind; factor?: number },
+): Promise<void> {
+  const instance = await loadInstanceOrThrow(args.instanceId)
+  assertMutable(instance)
+  const prescriptions = await db.instancePrescriptions.where('instanceId').equals(args.instanceId).toArray()
+
+  if (args.kind === 'reduceImpactVolume') {
+    // `factor` lets "Modify" (the card's finer-control action) apply a
+    // custom reduction instead of the default 25% — still only ever a
+    // reduction, never an increase, since the whole point is easing load.
+    const factor = args.factor ?? IMPACT_REDUCTION_FACTOR
+    for (const p of prescriptions) {
+      if (p.distanceM === undefined) continue
+      await db.instancePrescriptions.put({ ...p, distanceM: Math.round(p.distanceM * factor) })
+    }
+    return
+  }
+
+  if (args.kind === 'swapHardRunForLowImpact') {
+    for (const p of prescriptions) {
+      const exercise = await db.exercises.get(p.exerciseId)
+      if (exercise?.category !== 'run') continue
+      await db.instancePrescriptions.put({ ...p, exerciseId: LOW_IMPACT_SWAP_EXERCISE_ID })
+    }
+  }
+  // maintainCalfTibialis / holdLoadProgression / seekAssessment /
+  // stopAggravatingExercise: no InstancePrescription mutation — see doc comment.
 }
 
 async function nextSetIndex(instanceId: string, instancePrescriptionId: string): Promise<number> {

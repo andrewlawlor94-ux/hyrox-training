@@ -339,7 +339,10 @@ describe('strength logging screen', () => {
     await renderWorkout(instanceId)
     await screen.findByText('Back squat')
 
-    expect(screen.getByText(/sciatic/i)).toBeInTheDocument()
+    // Scoped to the recommendation's own reason line — the workout footer's
+    // "Sciatic/back" symptom-capture scale (Task 23) also legitimately
+    // contains the word "sciatic" elsewhere on the same page.
+    expect(document.querySelector('.target-header__reason')?.textContent).toMatch(/sciatic/i)
   })
 
   it('renders station fields (distance, load, time, RPE) instead of a strength set row for a station exercise', async () => {

@@ -271,6 +271,28 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .sled-fields__row .number-field { flex: 1 1 120px; min-width: 100px; }
 .sled-fields__note { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
 
+/* ---------- WorkoutFooter / SymptomCapture / CompletionActions ---------- */
+.workout-footer { display: flex; flex-direction: column; gap: var(--space-4); border-top: 1px solid var(--border); padding-top: var(--space-4); }
+.symptom-capture { display: flex; flex-direction: column; gap: var(--space-3); }
+.symptom-capture__row { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.symptom-capture__row .scale-selector { flex: 1 1 200px; }
+.completion-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.completed-earlier-sheet { display: flex; flex-direction: column; gap: var(--space-3); }
+.completed-earlier-sheet__field { display: flex; flex-direction: column; gap: var(--space-1); }
+.completed-earlier-sheet__input { min-height: var(--tap-min); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 0 var(--space-3); background: var(--bg); color: var(--text); }
+
+/* ---------- SubstitutionCard / RedFlagScreen ---------- */
+.substitution-card { display: flex; flex-direction: column; gap: var(--space-2); }
+.substitution-card__title { margin: 0; font-size: var(--font-size-lg); font-weight: 600; }
+.substitution-card__detail { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
+.substitution-card__disclaimer { margin: 0; color: var(--text-muted); font-size: var(--font-size-xs); font-style: italic; }
+.substitution-card__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.red-flag-screen { display: flex; flex-direction: column; gap: var(--space-3); }
+.red-flag-screen__question { display: flex; flex-direction: column; gap: var(--space-2); }
+.red-flag-screen__urgent { margin: 0; font-weight: 600; color: var(--elevated); }
+.home-screen__urgent-card { display: flex; flex-direction: column; gap: var(--space-2); border: 1px solid var(--elevated); }
+.home-screen__urgent-text { margin: 0; color: var(--elevated); font-weight: 600; }
+
 /* ---------- DbErrorScreen (never a blank screen on a boot failure) ---------- */
 .db-error-screen { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); text-align: center; }
 .db-error-screen__title { font-size: var(--font-size-xl); font-weight: 600; margin: 0; color: var(--elevated); }
