@@ -23,6 +23,12 @@
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 24px;
+
+  /* Horizontal breathing room between content and the phone's edges. Kept as
+     its own token rather than reusing --space-4 so the page inset can be tuned
+     without also changing every card's internal padding: 16px read as cramped
+     against the bezel on a real device. */
+  --content-inset: 20px;
   --space-6: 32px;
 
   /* Minimum interactive target and minimum input font size to stop Safari zoom. */
