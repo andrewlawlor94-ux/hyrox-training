@@ -13,6 +13,10 @@ type NumberFieldProps = {
   inputMode?: 'decimal' | 'numeric'
   hideLabel?: boolean
   placeholder?: string
+  /** Fires after the field's own resync-to-`value` logic runs. Callers that
+   * need "flush on blur, don't wait for a debounce" (workout autosave) hook
+   * in here rather than needing their own wrapping input. */
+  onBlur?: () => void
 }
 
 function toText(value: number | null): string {
@@ -49,6 +53,7 @@ export const NumberField: FC<NumberFieldProps> = ({
   inputMode = 'decimal',
   hideLabel = false,
   placeholder,
+  onBlur,
 }) => {
   const [text, setText] = useState(() => toText(value))
   const isFocused = useRef(false)
@@ -78,6 +83,7 @@ export const NumberField: FC<NumberFieldProps> = ({
   const handleBlur = (): void => {
     isFocused.current = false
     setText(toText(value))
+    onBlur?.()
   }
 
   const inputClasses = unit ? 'number-field__input number-field__input--with-unit' : 'number-field__input'
