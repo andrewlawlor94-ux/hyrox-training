@@ -190,7 +190,10 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .home-screen__loading, .settings-screen__loading { padding: var(--space-5); color: var(--text-muted); }
 .home-screen__heading, .settings-screen__heading { font-size: var(--font-size-2xl); margin: 0; }
 .home-screen__urgent-card { display: flex; flex-direction: column; gap: var(--space-2); border-color: var(--elevated); }
-.settings-screen__section { display: flex; flex-direction: column; gap: var(--space-2); }
+.settings-screen__section { display: flex; flex-direction: column; gap: var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
+.settings-screen__section h2 { font-size: var(--font-size-lg); margin: 0; }
+.settings-screen__vibration { border: none; margin: 0; padding: 0; }
+.settings-screen__note { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
 
 /* ---------- Home: Today's workout / This week / Goal snapshot (Task 24) ----------
    Shared rules: every card is a flex column, every list resets to no bullets, and
