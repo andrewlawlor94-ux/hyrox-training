@@ -130,6 +130,9 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
      the home-indicator safe area beneath it. */
   padding-bottom: calc(var(--nav-height) + var(--safe-bottom));
 }
+.app-shell__main--timer-active {
+  padding-bottom: calc(var(--nav-height) + var(--timer-bar-height) + var(--safe-bottom));
+}
 
 /* ---------- BottomNav (fixed, never a hamburger, text label always present) ---------- */
 .bottom-nav {
@@ -157,6 +160,27 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
   font-weight: 600;
 }
 .bottom-nav__link--active { color: var(--accent); }
+
+/* ---------- RestTimerBar (fixed, sits directly above BottomNav) ---------- */
+.rest-timer-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--nav-height) + var(--safe-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--accent-soft);
+  border-top: 1px solid var(--border);
+  padding: var(--space-2) var(--space-4);
+  padding-left: calc(var(--space-4) + var(--safe-left));
+  padding-right: calc(var(--space-4) + var(--safe-right));
+}
+.rest-timer-bar__info { display: flex; flex-direction: column; min-width: 0; }
+.rest-timer-bar__label { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rest-timer-bar__countdown { margin: 0; font-size: var(--font-size-xl); font-weight: 700; font-variant-numeric: tabular-nums; }
+.rest-timer-bar__controls { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
 
 /* ---------- HomeScreen / SettingsScreen (minimal for Task 18) ---------- */
 .home-screen, .settings-screen { display: flex; flex-direction: column; gap: var(--space-4); }
