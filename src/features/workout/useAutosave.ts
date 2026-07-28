@@ -6,6 +6,14 @@ interface PendingEntry {
   save: () => Promise<void>
 }
 
+/** Dexie surfaces a closed database as a `DatabaseClosedError`, identified by
+ * `name` rather than by class so this holds across Dexie's wrapped/inner error
+ * shapes without importing Dexie into a component module. */
+function isDatabaseClosed(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'name' in err
+    && (err as { name?: unknown }).name === 'DatabaseClosedError'
+}
+
 export interface UseAutosaveResult {
   /** (Re)schedules `save` for `key`, cancelling any timer already pending
    * for that key. Call this on every keystroke — the closure passed in
@@ -48,6 +56,12 @@ export function useAutosave(debounceMs = AUTOSAVE_DEBOUNCE_MS): UseAutosaveResul
     try {
       await entry.save()
     } catch (err) {
+      // A flush racing a closing database is expected, not a fault: the unmount
+      // handler fires while the athlete is navigating away (and in tests while
+      // the fixture database is torn down), so the write legitimately loses. Any
+      // other failure is real and must stay loud — swallowing it wholesale would
+      // hide genuine data loss, which is the one thing this app cannot afford.
+      if (isDatabaseClosed(err)) return
       console.error('Autosave write failed', err)
     }
   }, [])
