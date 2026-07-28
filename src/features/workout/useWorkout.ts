@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/data/db'
-import { addSet, exerciseHistory, getInstanceWithPrescriptions, listSymptomLogs, startWorkout } from '@/data/repositories'
+import { exerciseHistory, getInstanceWithPrescriptions, listSymptomLogs, startWorkout } from '@/data/repositories'
 import type { Exercise, InstancePrescription, StationLog, StrengthSet, WorkoutInstance } from '@/data/types'
 import type { ISODate } from '@/domain/types'
 import { evaluateSymptoms } from '@/domain/symptoms/evaluate'
@@ -106,20 +106,33 @@ async function loadWorkout(instanceId: string, today: ISODate): Promise<WorkoutD
   return { instance, exercises }
 }
 
-/** `isMounted` is checked before every iteration so an unmount (navigating
- * away mid-materialization, or a test tearing down) stops the loop rather
- * than continuing to write against a component — or, in tests, a database —
- * that's already gone. Sequential, not `Promise.all`: `addSet` derives each
- * new set's index from the current max in the table, so concurrent calls
- * would race and could both compute the same `setIndex`. */
-async function materializeSets(
-  instanceId: string, instancePrescriptionId: string, count: number, isMounted: { current: boolean },
-): Promise<void> {
-  const now = new Date().toISOString()
-  for (let i = 0; i < count; i += 1) {
-    if (!isMounted.current) return
-    await addSet({ instanceId, instancePrescriptionId, now })
-  }
+/**
+ * Ensures exactly `count` empty `StrengthSet` rows exist for a prescription,
+ * using DETERMINISTIC ids (`${instancePrescriptionId}_s${index}`) and
+ * `bulkPut` rather than the repo's `addSet` (which mints a random id and
+ * derives its index from the current table max). That combination is what
+ * makes this idempotent by construction rather than by a client-side "have I
+ * already done this" flag: React 18 StrictMode deliberately double-invokes
+ * effects in development (mount -> run effect -> simulate-unmount -> run
+ * cleanup -> remount -> run effect again), and a ref-based dedup guard set
+ * mid-flight by the FIRST invocation reads as "already handled" during the
+ * SECOND invocation even though nothing had actually been written yet —
+ * verified live in the browser, where that exact race left every strength
+ * card with zero set rows. Calling this twice (or twenty times) concurrently
+ * now just writes the same rows twice; `bulkPut` is a plain overwrite, no
+ * unique-constraint error, no duplicate rows, no lost writes.
+ */
+async function ensureSetsExist(instancePrescriptionId: string, ctx: { instanceId: string; exerciseId: string }, count: number): Promise<void> {
+  const rows: StrengthSet[] = Array.from({ length: count }, (_, index) => ({
+    id: `${instancePrescriptionId}_s${String(index)}`,
+    instanceId: ctx.instanceId,
+    instancePrescriptionId,
+    exerciseId: ctx.exerciseId,
+    setIndex: index,
+    isCompleted: false,
+    isWarmup: false,
+  }))
+  await db.strengthSets.bulkPut(rows)
 }
 
 /**
@@ -131,20 +144,17 @@ async function materializeSets(
  *
  * - Marks the instance `inProgress` the first time it's opened (so Home can
  *   offer "Continue"), guarded so it never re-fires for an instance already
- *   in progress, completed, or frozen.
- * - Materializes one `StrengthSet` row per prescribed set the first time a
- *   strength prescription has none yet — the prescribed set COUNT is known
- *   immediately, but each row starts with no weight/reps until logged
- *   (`addSet`'s own contract), matching "prefilled" being a display concern,
- *   not a written one.
+ *   in progress, completed, or frozen. `startWorkout` itself preserves an
+ *   existing `startedAt`, so a repeat call is harmless.
+ * - Ensures one `StrengthSet` row per prescribed set exists for every
+ *   strength prescription — `ensureSetsExist` is naturally idempotent
+ *   (deterministic ids + `bulkPut`), so this needs no client-side "already
+ *   ran" flag; it simply re-checks `sets.length` on every live-query
+ *   emission and no-ops once rows exist.
  */
 export function useWorkout(instanceId: string, today: ISODate): WorkoutData | undefined {
   const data = useLiveQuery(() => loadWorkout(instanceId, today), [instanceId, today])
   const startedInstanceId = useRef<string | undefined>(undefined)
-  const materializing = useRef<Set<string>>(new Set())
-  const isMounted = useRef(true)
-
-  useEffect(() => () => { isMounted.current = false }, [])
 
   useEffect(() => {
     if (data === undefined) return
@@ -165,10 +175,8 @@ export function useWorkout(instanceId: string, today: ISODate): WorkoutData | un
     for (const item of data.exercises) {
       if (item.kind !== 'strength') continue
       if (item.sets.length > 0) continue
-      if (materializing.current.has(item.prescription.id)) continue
-      materializing.current.add(item.prescription.id)
       const count = item.prescription.sets ?? item.exercise.defaultSets ?? 1
-      materializeSets(item.prescription.instanceId, item.prescription.id, count, isMounted).catch(() => {})
+      ensureSetsExist(item.prescription.id, { instanceId: item.prescription.instanceId, exerciseId: item.exercise.id }, count).catch(() => {})
     }
   }, [data])
 
