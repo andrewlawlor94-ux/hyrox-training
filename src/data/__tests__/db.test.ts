@@ -60,4 +60,29 @@ describe('classifyDbError', () => {
   it('does not throw on a null input', () => {
     expect(classifyDbError(null)).toBe('unknown')
   })
+
+  // A plausible-but-broken implementation that only guards `=== null` (and
+  // skips the `typeof !== 'object'` check) would pass every case above and
+  // then throw a TypeError reading `.name` off `undefined` or a primitive —
+  // on an error-handling path, which is the worst place to throw. These
+  // cases pin the broader guard, not just the null case.
+  it('does not throw on an undefined input', () => {
+    expect(classifyDbError(undefined)).toBe('unknown')
+  })
+
+  it('does not throw on a primitive string input', () => {
+    expect(classifyDbError('boom')).toBe('unknown')
+  })
+
+  it('does not throw on a primitive number input', () => {
+    expect(classifyDbError(42)).toBe('unknown')
+  })
+
+  it('does not throw on an array input', () => {
+    expect(classifyDbError(['not', 'an', 'error'])).toBe('unknown')
+  })
+
+  it('does not throw on a function input', () => {
+    expect(classifyDbError(() => { /* not an error */ })).toBe('unknown')
+  })
 })
