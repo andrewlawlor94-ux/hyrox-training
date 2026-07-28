@@ -3,7 +3,7 @@ import { db, openDb, resetDatabase } from '@/data/db'
 import type { WorkoutInstance } from '@/data/types'
 import { HistoryImmutableError } from '@/data/errors'
 import {
-  addSet, completeSet, completeWorkout, getInstanceWithPrescriptions, removeSet, startWorkout, upsertSet,
+  addSet, completeSet, completeWorkout, getInstanceWithPrescriptions, removeSet, startWorkout, undoSet, upsertSet,
 } from '../workoutRepo'
 import { listEvents } from '../scheduleRepo'
 
@@ -81,6 +81,98 @@ describe('workoutRepo', () => {
     await db.workoutInstances.put({ ...(await db.workoutInstances.get('wi_1'))!, frozen: true, status: 'completed' })
     await expect(completeSet('set_1', '2026-07-27T11:00:00.000Z')).resolves.toBeUndefined()
     expect((await db.strengthSets.get('set_1'))?.completedAt).toBe(NOW)
+  })
+
+  it('completeSet persists the currently-displayed weight, reps, and rir together with isCompleted, in one write (the one-tap no-edit path)', async () => {
+    await db.workoutInstances.add(makeInstance())
+    await db.strengthSets.add({
+      id: 'set_1', instanceId: 'wi_1', instancePrescriptionId: 'ip_1', exerciseId: 'ex_1', setIndex: 0,
+      isCompleted: false, isWarmup: false,
+    })
+    await completeSet('set_1', NOW, { weight: 175, reps: 4, rir: 2 })
+    const set = await db.strengthSets.get('set_1')
+    expect(set?.weight).toBe(175)
+    expect(set?.reps).toBe(4)
+    expect(set?.rir).toBe(2)
+    expect(set?.isCompleted).toBe(true)
+    expect(set?.completedAt).toBe(NOW)
+  })
+
+  it('completeSet also persists the currently-displayed unit alongside a real weight, so the session still qualifies as usable history (exerciseHistory requires weight, reps, AND unit)', async () => {
+    await db.workoutInstances.add(makeInstance())
+    await db.strengthSets.add({
+      id: 'set_1', instanceId: 'wi_1', instancePrescriptionId: 'ip_1', exerciseId: 'ex_1', setIndex: 0,
+      isCompleted: false, isWarmup: false,
+    })
+    await completeSet('set_1', NOW, { weight: 175, reps: 4, rir: 2, unit: 'lb' })
+    const set = await db.strengthSets.get('set_1')
+    expect(set?.unit).toBe('lb')
+  })
+
+  it('completeSet omits a value the athlete left genuinely blank rather than writing 0 or a leftover stale value', async () => {
+    await db.workoutInstances.add(makeInstance())
+    await db.strengthSets.add({
+      id: 'set_1', instanceId: 'wi_1', instancePrescriptionId: 'ip_1', exerciseId: 'ex_1', setIndex: 0,
+      isCompleted: false, isWarmup: false,
+    })
+    await completeSet('set_1', NOW, { weight: 175, reps: null, rir: null })
+    const set = await db.strengthSets.get('set_1')
+    expect(set?.weight).toBe(175)
+    expect(set && Object.hasOwn(set, 'reps')).toBe(false)
+    expect(set && Object.hasOwn(set, 'rir')).toBe(false)
+  })
+
+  it('completeSet called twice with values only applies the first call\'s values (idempotent, not a repeated overwrite)', async () => {
+    await db.workoutInstances.add(makeInstance())
+    await db.strengthSets.add({
+      id: 'set_1', instanceId: 'wi_1', instancePrescriptionId: 'ip_1', exerciseId: 'ex_1', setIndex: 0,
+      isCompleted: false, isWarmup: false,
+    })
+    await completeSet('set_1', NOW, { weight: 175, reps: 4, rir: 2 })
+    await completeSet('set_1', '2026-07-27T10:05:00.000Z', { weight: 999, reps: 1, rir: 0 })
+    const set = await db.strengthSets.get('set_1')
+    expect(set?.weight).toBe(175)
+    expect(set?.reps).toBe(4)
+    expect(set?.rir).toBe(2)
+    expect(set?.completedAt).toBe(NOW)
+  })
+
+  describe('undoSet', () => {
+    it('clears isCompleted and completedAt while preserving the logged weight, reps, and rir', async () => {
+      await db.workoutInstances.add(makeInstance())
+      await db.strengthSets.add({
+        id: 'set_1', instanceId: 'wi_1', instancePrescriptionId: 'ip_1', exerciseId: 'ex_1', setIndex: 0,
+        weight: 175, reps: 5, rir: 2, isCompleted: true, completedAt: NOW, isWarmup: false,
+      })
+      await undoSet('set_1')
+      const set = await db.strengthSets.get('set_1')
+      expect(set?.isCompleted).toBe(false)
+      expect(set?.completedAt).toBeUndefined()
+      expect(set?.weight).toBe(175)
+      expect(set?.reps).toBe(5)
+      expect(set?.rir).toBe(2)
+    })
+
+    it('is a no-op on a set that is not completed', async () => {
+      await db.workoutInstances.add(makeInstance())
+      await db.strengthSets.add({
+        id: 'set_1', instanceId: 'wi_1', instancePrescriptionId: 'ip_1', exerciseId: 'ex_1', setIndex: 0,
+        isCompleted: false, isWarmup: false,
+      })
+      await undoSet('set_1')
+      const set = await db.strengthSets.get('set_1')
+      expect(set?.isCompleted).toBe(false)
+      expect(set?.completedAt).toBeUndefined()
+    })
+
+    it('throws HistoryImmutableError when undoing a completed set on a now-frozen instance', async () => {
+      await db.workoutInstances.add(makeInstance({ frozen: true, status: 'completed' }))
+      await db.strengthSets.add({
+        id: 'set_1', instanceId: 'wi_1', instancePrescriptionId: 'ip_1', exerciseId: 'ex_1', setIndex: 0,
+        weight: 175, reps: 5, isCompleted: true, completedAt: NOW, isWarmup: false,
+      })
+      await expect(undoSet('set_1')).rejects.toBeInstanceOf(HistoryImmutableError)
+    })
   })
 
   it('addSet on a frozen instance throws HistoryImmutableError', async () => {
