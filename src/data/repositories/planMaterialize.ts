@@ -64,6 +64,7 @@ async function materializeWeek(args: {
   sessions: {
     sessionSlot: number; sequenceInWeek: number; name: string; kind: WorkoutKind
     priority: WorkoutTemplate['priority']; recoveryTags: WorkoutTemplate['recoveryTags']; estMinutes: number
+    stationVolumePct?: number
     prescriptions: Omit<Prescription, 'id' | 'templateId'>[]
   }[]
   existingPlanWeeks: Map<number, PlanWeek>
@@ -100,6 +101,7 @@ async function materializeWeek(args: {
       id: templateId, planId: args.planId, planWeekId: planWeek.id, sessionSlot: session.sessionSlot,
       sequenceInWeek: session.sequenceInWeek, name: session.name, kind: session.kind, priority: session.priority,
       recoveryTags: session.recoveryTags, estMinutes: session.estMinutes, notes: '',
+      ...(session.stationVolumePct !== undefined ? { stationVolumePct: session.stationVolumePct } : {}),
     }
     await db.workoutTemplates.add(template)
 
@@ -170,6 +172,7 @@ export async function materializePlan(args: MaterializeArgs): Promise<void> {
       sessions: week.templates.map((t) => ({
         sessionSlot: t.sessionSlot, sequenceInWeek: t.sequenceInWeek, name: t.name, kind: t.kind,
         priority: t.priority, recoveryTags: t.recoveryTags, estMinutes: t.estMinutes,
+        ...(t.stationVolumePct !== undefined ? { stationVolumePct: t.stationVolumePct } : {}),
         prescriptions: t.prescriptions.map((p) => ({ ...p })),
       })),
       existingPlanWeeks, phaseCache, skipSlots,

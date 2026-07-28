@@ -185,15 +185,42 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .rest-timer-bar__countdown { margin: 0; font-size: var(--font-size-xl); font-weight: 700; font-variant-numeric: tabular-nums; }
 .rest-timer-bar__controls { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
 
-/* ---------- HomeScreen / SettingsScreen (minimal for Task 18) ---------- */
+/* ---------- HomeScreen / SettingsScreen ---------- */
 .home-screen, .settings-screen { display: flex; flex-direction: column; gap: var(--space-4); }
 .home-screen__loading, .settings-screen__loading { padding: var(--space-5); color: var(--text-muted); }
 .home-screen__heading, .settings-screen__heading { font-size: var(--font-size-2xl); margin: 0; }
-.home-screen__date { margin: 0; color: var(--text-muted); }
-.home-screen__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
-.home-screen__slot { font-weight: 600; margin: 0 0 var(--space-1); }
-.home-screen__status { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
+.home-screen__urgent-card { display: flex; flex-direction: column; gap: var(--space-2); border-color: var(--elevated); }
 .settings-screen__section { display: flex; flex-direction: column; gap: var(--space-2); }
+
+/* ---------- Home: Today's workout / This week / Goal snapshot (Task 24) ----------
+   Shared rules: every card is a flex column, every list resets to no bullets, and
+   long copy (adjustment explanations, evidence lines) wraps within the 375px
+   viewport rather than forcing horizontal scroll (D-constraint: no page scroll
+   at 375px — a <fieldset> elsewhere in this app already caused a real regression
+   from unwrapped content). */
+.todays-workout-card, .this-week-card, .goal-snapshot-card {
+  display: flex; flex-direction: column; gap: var(--space-2); overflow-wrap: anywhere;
+}
+.todays-workout-card h2, .this-week-card h2, .goal-snapshot-card h2 { font-size: var(--font-size-lg); margin: 0; }
+.todays-workout-card h3, .this-week-card h3, .goal-snapshot-card h3 {
+  font-size: var(--font-size-sm); text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-muted); margin: 0;
+}
+.todays-workout-card__name { font-size: var(--font-size-xl); font-weight: 700; margin: 0; }
+.todays-workout-card__phase, .this-week-card__phase, .goal-snapshot-card__week { margin: 0; color: var(--text-muted); }
+.todays-workout-card__meta { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin: 0; }
+.todays-workout-card__structure, .this-week-card__schedule ul, .this-week-card__partial ul,
+.this-week-card__skipped ul, .this-week-card__moved ul, .goal-snapshot-card__evidence {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1);
+}
+.todays-workout-card__reason, .todays-workout-card__adjustment, .todays-workout-card__caution,
+.todays-workout-card__next { margin: 0; }
+.todays-workout-card__caution { color: var(--elevated); font-weight: 600; }
+.todays-workout-card__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.this-week-card__essential, .this-week-card__total, .this-week-card__minimum { margin: 0; }
+.this-week-card__next-action { margin: 0; font-weight: 600; }
+.goal-snapshot-card__race-date, .goal-snapshot-card__target, .goal-snapshot-card__running,
+.goal-snapshot-card__strength, .goal-snapshot-card__symptoms, .goal-snapshot-card__trajectory,
+.goal-snapshot-card__estimate, .goal-snapshot-card__no-estimate { margin: 0; }
 
 /* ---------- Onboarding (race date -> profile -> goal) ---------- */
 .onboarding-step { display: flex; flex-direction: column; gap: var(--space-4); padding-bottom: var(--space-6); }

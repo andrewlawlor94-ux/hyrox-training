@@ -11,7 +11,7 @@ const NOW = '2026-01-05T08:00:00.000Z'
 // the file it's declared in, and this one needs Home to throw on every
 // render — doing that inside shell.test.tsx would break every other test
 // there that expects a real Home screen.
-vi.mock('@/features/shell/HomeScreen', () => ({
+vi.mock('@/features/home/HomeScreen', () => ({
   HomeScreen: () => {
     throw new Error('boom: forced render failure to prove per-route ErrorBoundary wiring')
   },
