@@ -1,0 +1,115 @@
+import type { Priority } from '@/data/types'
+import { PHASE_TYPICAL_PRIORITY, ZONE2_SLOT, phaseForWeek } from './phases'
+import { buildStrengthA, buildStrengthB } from './strengthTemplates'
+import { RUN_PROGRESSION, buildRaceWeekTechniqueTemplate, buildZone2Template } from './runProgression'
+import type { SeedTemplate, SeedWeek } from './types'
+
+const TOTAL_WEEKS = 24
+const DELOAD_WEEKS = new Set([4, 8])
+/** Reduced-to-minimum weeks (D5): every one of these carries only its
+ * essential four sessions -- see `weeks.test.ts`/`priorities.test.ts`. */
+const MIN_SESSION_WEEK_SLOTS: Record<number, readonly number[]> = {
+  12: [1, 2, 4, 6],
+  18: [1, 4, 5, 6],
+  21: [1, 4, 5, 6],
+  24: [1, 2, 4, 6],
+}
+/** Consolidation weeks: full slot set minus Zone 2 (five sessions). */
+const FIVE_SESSION_WEEK_SLOTS: Record<number, readonly number[]> = {
+  16: [1, 2, 4, 5, 6],
+  22: [1, 2, 4, 5, 6],
+}
+const FULL_WEEK_SLOTS: readonly number[] = [1, 2, 3, 4, 5, 6]
+
+const WEEK_NOTES: Record<number, string> = {
+  4: 'Deload week: running volume drops so the body absorbs the last three weeks of aerobic build.',
+  8: 'Deload week: running volume drops before the week 12 benchmark test.',
+  12: 'Benchmark week: a standalone 5 km time test plus a half-HYROX simulation (4 x 1 km, all eight stations at half volume).',
+  16: 'Consolidation week: reduced volume and no dedicated station work before the final race-specific push.',
+  18: 'Full-format simulation week: the near-full rehearsal, about six weeks from race day.',
+  21: 'Controlled full-format rehearsal, about three weeks from race day -- executed under control, not as an all-out race.',
+  22: 'Reduced-volume consolidation heading into the taper: heavy strength drops, intensity is preserved.',
+  23: 'Taper: roughly 60-70% of peak volume, no exhausting simulation.',
+  24: 'Race week: roughly 35-45% of peak volume, sharpening for race day.',
+}
+
+function slotsForWeek(weekNumber: number): readonly number[] {
+  return MIN_SESSION_WEEK_SLOTS[weekNumber] ?? FIVE_SESSION_WEEK_SLOTS[weekNumber] ?? FULL_WEEK_SLOTS
+}
+
+/**
+ * D7/D5: whichever of a phase's two flex slots (Zone 2 always optional, one
+ * of {easy run, slot 6} important) is present that week keeps its typical
+ * priority -- *except* in a reduced-to-minimum (four-session) week, where
+ * every present session is essential by definition (D5's four-session
+ * minimum leaves no room for a non-essential session).
+ */
+function priorityForSlot(weekSlots: readonly number[], slot: number, importantSlot: number): Priority {
+  const MIN_EFFECTIVE_WEEK_SESSIONS = 4
+  if (weekSlots.length <= MIN_EFFECTIVE_WEEK_SESSIONS) return 'essential'
+  if (slot === ZONE2_SLOT) return 'optional'
+  if (slot === importantSlot) return 'important'
+  return 'essential'
+}
+
+function buildTemplateForSlot(weekNumber: number, slot: number, sequenceInWeek: number, priority: Priority): SeedTemplate {
+  const runEntry = RUN_PROGRESSION[weekNumber]
+  if (!runEntry) throw new Error(`No run-progression entry for week ${String(weekNumber)}`)
+  switch (slot) {
+    case 1:
+      return weekNumber === TOTAL_WEEKS ? buildRaceWeekTechniqueTemplate(sequenceInWeek, priority) : buildStrengthA(weekNumber, sequenceInWeek, priority)
+    case 2:
+      return { ...runEntry.easy, sequenceInWeek, priority }
+    case 3:
+      return buildZone2Template(weekNumber, runEntry.zone2Minutes, sequenceInWeek)
+    case 4:
+      return { ...runEntry.quality, sequenceInWeek, priority }
+    case 5:
+      return buildStrengthB(weekNumber, sequenceInWeek, priority)
+    case 6:
+      return { ...runEntry.slotSix, sequenceInWeek, priority }
+    default:
+      throw new Error(`Unknown session slot: ${String(slot)}`)
+  }
+}
+
+function buildWeek(weekNumber: number): SeedWeek {
+  const phase = phaseForWeek(weekNumber)
+  const typical = PHASE_TYPICAL_PRIORITY[phase.name]
+  if (!typical) throw new Error(`No typical priority mapping for phase: ${phase.name}`)
+  const weekSlots = slotsForWeek(weekNumber)
+  const templates = weekSlots.map((slot, sequenceInWeek) =>
+    buildTemplateForSlot(weekNumber, slot, sequenceInWeek, priorityForSlot(weekSlots, slot, typical.importantSlot)),
+  )
+  const notes = WEEK_NOTES[weekNumber]
+  return {
+    weekNumber,
+    phaseName: phase.name,
+    label: `Week ${String(weekNumber)} -- ${phase.name}`,
+    isDeload: DELOAD_WEEKS.has(weekNumber),
+    ...(notes !== undefined ? { notes } : {}),
+    templates,
+  }
+}
+
+/** Recursively freezes an object/array so downstream code cannot mutate the
+ * seed data in place -- a shallow copy of `SEED_WEEKS_24` still shares every
+ * nested object with the source, and strict-mode ESM throws on any write to
+ * a frozen property, catching accidental mutation immediately rather than
+ * corrupting the shared singleton silently. */
+function deepFreeze<T>(value: T): T {
+  if (value !== null && (typeof value === 'object' || typeof value === 'function') && !Object.isFrozen(value)) {
+    Object.values(value).forEach(deepFreeze)
+    Object.freeze(value)
+  }
+  return value
+}
+
+function buildAllWeeks(): SeedWeek[] {
+  return Array.from({ length: TOTAL_WEEKS }, (_, i) => buildWeek(i + 1))
+}
+
+/** The full 24-week seeded plan (§19), generated from phase, week, and
+ * template configuration rather than hand-written -- see `phases.ts`,
+ * `strengthTemplates.ts`, and `runProgression.ts` for the generators. */
+export const SEED_WEEKS_24: readonly SeedWeek[] = deepFreeze(buildAllWeeks())
