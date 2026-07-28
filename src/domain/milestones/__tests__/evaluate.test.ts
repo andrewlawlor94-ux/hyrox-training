@@ -136,6 +136,27 @@ describe('evaluateMilestones', () => {
       const r = pick(evaluateMilestones(facts({ symptomsFlagged: false }), TARGETS), 'symptomsManageable')
       expect(r.status).toBe('achieved')
     })
+
+    // symptomsManageable's targetWeek (24) must not, on its own, make a
+    // healthy athlete atRisk just because the plan's final week has (or
+    // hasn't) arrived — only the live symptom flag decides atRisk-ness.
+    // The generic target-week-passed rule only escalates a *non-achieved*
+    // status; an unflagged athlete is always 'achieved', so it is never
+    // reachable here regardless of week.
+    it('is not atRisk merely because week 24 has arrived, when unflagged', () => {
+      const r = pick(evaluateMilestones(facts({ currentWeek: 24, symptomsFlagged: false }), TARGETS), 'symptomsManageable')
+      expect(r.status).toBe('achieved')
+    })
+
+    it('is not atRisk merely because week 24 has not yet arrived, when unflagged', () => {
+      const r = pick(evaluateMilestones(facts({ currentWeek: 1, symptomsFlagged: false }), TARGETS), 'symptomsManageable')
+      expect(r.status).toBe('achieved')
+    })
+
+    it('stays atRisk when flagged, even long after week 24', () => {
+      const r = pick(evaluateMilestones(facts({ currentWeek: 30, symptomsFlagged: true }), TARGETS), 'symptomsManageable')
+      expect(r.status).toBe('atRisk')
+    })
   })
 
   describe('simulation milestones', () => {
@@ -165,13 +186,13 @@ describe('evaluateMilestones', () => {
 
   describe('target-week risk escalation', () => {
     it('reports atRisk once a milestone\'s target week has passed without achievement', () => {
-      // standalone5k targets week 8. Nothing achieved by week 9.
-      const r = pick(evaluateMilestones(facts({ currentWeek: 9 }), TARGETS), 'standalone5k')
+      // standalone5k targets week 12 (the plan's own benchmark week). Nothing achieved by week 13.
+      const r = pick(evaluateMilestones(facts({ currentWeek: 13 }), TARGETS), 'standalone5k')
       expect(r.status).toBe('atRisk')
     })
 
     it('stays notStarted (not atRisk) before the target week passes', () => {
-      const r = pick(evaluateMilestones(facts({ currentWeek: 8 }), TARGETS), 'standalone5k')
+      const r = pick(evaluateMilestones(facts({ currentWeek: 12 }), TARGETS), 'standalone5k')
       expect(r.status).toBe('notStarted')
     })
 
@@ -191,7 +212,7 @@ describe('evaluateMilestones', () => {
   describe('weeklyRunningDistance (durability, absolute)', () => {
     it('reads the peak logged week, not the latest or a sum', () => {
       const r = pick(evaluateMilestones(facts({
-        weeklyRunKm: [{ weekNumber: 1, km: 10 }, { weekNumber: 2, km: 24 }, { weekNumber: 3, km: 5 }],
+        weeklyRunKm: [{ weekNumber: 1, km: 10 }, { weekNumber: 2, km: 28 }, { weekNumber: 3, km: 5 }],
       }), TARGETS), 'weeklyRunningDistance')
       expect(r.status).toBe('achieved')
     })

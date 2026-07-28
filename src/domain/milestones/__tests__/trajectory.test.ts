@@ -31,7 +31,7 @@ function allAchievedFacts(currentWeek: number): MilestoneFacts {
   return facts({
     currentWeek,
     weeksWithFourPlusSessions: 4,
-    weeklyRunKm: [{ weekNumber: currentWeek, km: 24 }],
+    weeklyRunKm: [{ weekNumber: currentWeek, km: 28 }],
     longestContinuousRunKm: 12,
     best5kSeconds: 1700,
     compromisedKmMeanSec: 390,
@@ -63,7 +63,7 @@ describe('computeTrajectory', () => {
     const f = facts({
       currentWeek: 14,
       weeksWithFourPlusSessions: 4, // fourWorkoutWeeks: achieved
-      weeklyRunKm: [{ weekNumber: 14, km: 24 }], // weeklyRunningDistance: achieved
+      weeklyRunKm: [{ weekNumber: 14, km: 28 }], // weeklyRunningDistance: achieved
       longestContinuousRunKm: 12, // longestContinuousRun + comfortable10k: achieved (2)
       best5kSeconds: 1700, // standalone5k: achieved
       compromisedKmMeanSec: 390,
@@ -83,7 +83,7 @@ describe('computeTrajectory', () => {
     const f = facts({
       currentWeek: 14,
       weeksWithFourPlusSessions: 4,
-      weeklyRunKm: [{ weekNumber: 14, km: 24 }],
+      weeklyRunKm: [{ weekNumber: 14, km: 28 }],
       longestContinuousRunKm: 12,
       best5kSeconds: 1700,
       compromisedKmMeanSec: 390,
@@ -113,7 +113,7 @@ describe('computeTrajectory', () => {
     const f = facts({
       currentWeek: 12,
       weeksWithFourPlusSessions: 4,
-      weeklyRunKm: [{ weekNumber: 12, km: 24 }],
+      weeklyRunKm: [{ weekNumber: 12, km: 28 }],
       longestContinuousRunKm: 12,
       best5kSeconds: 1700,
       compromisedKmMeanSec: 390,

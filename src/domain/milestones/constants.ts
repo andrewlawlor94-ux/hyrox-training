@@ -40,22 +40,37 @@ export const LONGEST_RUN_TARGET_KM = 12
 export const COMFORTABLE_10K_KM = 10
 
 /**
- * Peak weekly running-volume target, in km. Not given a numeric value by the
+ * Weekly running-volume target, in km. Not given a numeric value by the
  * design brief (which only says "phase-scaled weekly volume" without a
- * figure) — chosen here as roughly double the 12 km longest-continuous-run
- * milestone, consistent with the common injury-prevention guideline that a
- * single long run should not exceed about half of weekly volume. Relevant
- * given the athlete's shin/sciatic history. Editable in Settings if the
- * assumption proves wrong.
+ * figure). The race itself is 8 km of running, and weekly volume needs to
+ * sit meaningfully above race distance for the athlete to be durable rather
+ * than merely capable of the distance once. The seeded plan's own peak
+ * weeks (13-21) prescribe roughly an easy run ~8 km, a quality session
+ * ~9 km including warm-up/cool-down, and a long run up to 12 km — a planned
+ * peak of 30-36 km/week. 28 km is therefore "consistently at adequate
+ * volume", not "at peak": the right bar for a milestone (as opposed to a
+ * one-off best week), and deliberately conservative given the athlete's
+ * shin history makes running volume this plan's main injury risk. Editable
+ * in Settings if the assumption proves wrong.
  */
-export const WEEKLY_RUN_KM_TARGET = 24
+export const WEEKLY_RUN_DISTANCE_TARGET_KM = 28
 
 // --- Count-based milestones. ---
 
 /** Six compromised 1 km efforts is the brief's stated confidence threshold. */
 export const COMPROMISED_KM_REQUIRED_COUNT = 6
 
-/** Weeks with four or more sessions required for the consistency milestone. */
+/**
+ * Number of weeks (counted, not required to be consecutive) with four or
+ * more sessions. This is deliberately a count: `MilestoneFacts` carries
+ * `weeksWithFourPlusSessions` as a running total, not a list of which weeks
+ * qualified, so there is no way to check adjacency from these facts alone.
+ * A true consecutive-streak version would need a different fact shape
+ * (e.g. per-week qualifying flags) and is out of scope here — the label and
+ * evidence for this milestone must say "N weeks with 4+ sessions", never
+ * "N consecutive weeks" or "consistent", so the UI never claims a
+ * consistency it hasn't actually measured.
+ */
 export const FOUR_WORKOUT_WEEKS_REQUIRED = 4
 
 /**
@@ -104,7 +119,11 @@ export const MILESTONE_ORDER: readonly MilestoneKey[] = [
 ]
 
 export const MILESTONE_LABELS: Record<MilestoneKey, string> = {
-  fourWorkoutWeeks: 'Consistent four-workout weeks',
+  // Deliberately not "Consistent four-workout weeks" — the underlying fact
+  // is a count of qualifying weeks, not a measured consecutive streak (see
+  // FOUR_WORKOUT_WEEKS_REQUIRED). Claiming consistency the app hasn't
+  // measured would be exactly the guilt/misleading framing the brief bans.
+  fourWorkoutWeeks: 'Weeks with 4+ sessions',
   weeklyRunningDistance: 'Weekly running distance',
   longestContinuousRun: 'Longest continuous run',
   comfortable10k: 'Comfortable 10 km',
@@ -119,24 +138,42 @@ export const MILESTONE_LABELS: Record<MilestoneKey, string> = {
 }
 
 /**
- * Plan week by which each milestone should be met, based on the plan's fixed
- * 24-week periodization (base weeks 1-8, build 9-16, peak 17-20, taper/race
- * 21-24 — §19). `halfSimulation` (12), `seventyFiveSimulation` (18), and
- * `fullRehearsal` (21) come directly from the design brief (D4); the other
- * nine are not numbered by the brief and are placed here at a plausible
- * point in that same periodization so every milestone can be checked against
- * "target week has passed" (see evaluate.ts). A milestone not yet achieved
- * after its target week is reported `atRisk` rather than merely `inProgress`.
+ * Plan week by which each milestone should be met. Anchored to the seeded
+ * 24-week plan's own benchmark weeks — it already places a 5 km benchmark
+ * and the half simulation in week 12, the 75% simulation in week 18, and
+ * the full rehearsal in week 21 (D4) — so every other milestone hangs off
+ * one of those three fixed points rather than an arbitrary date. That way
+ * `atRisk` (see evaluate.ts's target-week check) fires when a milestone is
+ * genuinely late relative to the plan's own structure, not on a guess:
+ *
+ * - `fourWorkoutWeeks` (6): consistency is a base-phase outcome — if it
+ *   isn't there by the end of Base, nothing later works.
+ * - `standalone5k` (12) / `halfSimulation` (12): the plan's own benchmark
+ *   week.
+ * - `comfortable10k` (12): a durability precondition for the build phase.
+ * - `weeklyRunningDistance` (14): volume should be at target early in
+ *   race-specific work.
+ * - `raceLoadSled` (16) / `hundredWallBall` (16): race-specific-phase
+ *   exposure, before the 75% simulation.
+ * - `longestContinuousRun` (18) / `seventyFiveSimulation` (18): 12 km
+ *   should be reached by the 75% simulation.
+ * - `compromisedKmSet` (20): the last fitness marker before taper.
+ * - `fullRehearsal` (21): the plan's own rehearsal week.
+ * - `symptomsManageable` (24): evaluated continuously — its own status
+ *   logic (atRisk iff currently flagged) already dominates, so this target
+ *   week only matters as the last point at which "still flagged" becomes
+ *   a plan-ending risk, not as a deadline that turns a healthy athlete
+ *   `atRisk` merely because week 24 hasn't arrived yet.
  */
 export const MILESTONE_TARGET_WEEKS: Record<MilestoneKey, number> = {
   fourWorkoutWeeks: 6,
   weeklyRunningDistance: 14,
-  longestContinuousRun: 16,
-  comfortable10k: 10,
-  standalone5k: 8,
-  compromisedKmSet: 16,
-  raceLoadSled: 12,
-  hundredWallBall: 12,
+  longestContinuousRun: 18,
+  comfortable10k: 12,
+  standalone5k: 12,
+  compromisedKmSet: 20,
+  raceLoadSled: 16,
+  hundredWallBall: 16,
   halfSimulation: 12,
   seventyFiveSimulation: 18,
   fullRehearsal: 21,

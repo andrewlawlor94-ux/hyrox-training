@@ -10,7 +10,7 @@ import {
   MILESTONE_TARGET_WEEKS,
   RACE_LOAD_SLED_SESSIONS_REQUIRED,
   SECONDS_PER_MINUTE,
-  WEEKLY_RUN_KM_TARGET,
+  WEEKLY_RUN_DISTANCE_TARGET_KM,
 } from './constants'
 import type { MilestoneKey } from './constants'
 
@@ -167,7 +167,7 @@ function evaluateFourWorkoutWeeks(facts: MilestoneFacts): MilestoneResult {
 function evaluateWeeklyRunningDistance(facts: MilestoneFacts): MilestoneResult {
   // Read-only scan for the peak week logged so far — never mutates `facts`.
   const peakKm = facts.weeklyRunKm.reduce((max, entry) => Math.max(max, entry.km), 0)
-  return evaluateThreshold('weeklyRunningDistance', facts.currentWeek, 'Peak weekly running distance', peakKm, WEEKLY_RUN_KM_TARGET, formatKm)
+  return evaluateThreshold('weeklyRunningDistance', facts.currentWeek, 'Peak weekly running distance', peakKm, WEEKLY_RUN_DISTANCE_TARGET_KM, formatKm)
 }
 
 function evaluateRaceLoadSled(facts: MilestoneFacts): MilestoneResult {
