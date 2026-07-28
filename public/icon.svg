@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    Original artwork for HYROX Training — no HYROX branding, logos, colours,
+    or fonts are referenced or approximated anywhere in this file.
+
+    A rounded-square tile in the app's own accent blue (the CSS custom
+    property "accent", #2563eb) containing an abstract barbell: a horizontal
+    bar connecting a plate block at each end. The two plate blocks plus the
+    connecting bar also read as an implied "H" in the negative/positive
+    space, entirely incidentally to the barbell shape itself.
+  -->
+  <rect x="0" y="0" width="512" height="512" rx="96" fill="#2563eb" />
+  <rect x="88" y="148" width="72" height="216" rx="16" fill="#ffffff" />
+  <rect x="352" y="148" width="72" height="216" rx="16" fill="#ffffff" />
+  <rect x="160" y="228" width="192" height="56" rx="16" fill="#ffffff" />
+</svg>

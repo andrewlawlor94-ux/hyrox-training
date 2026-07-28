@@ -18,7 +18,15 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": ["node"],
+    // scripts/generate-icons.mjs is plain JS, not TS — without this, the
+    // `.mjs` glob in `include` below matches zero recognized input files
+    // (TypeScript only counts .ts/.tsx/.d.ts as inputs unless allowJs is on),
+    // which reproduces the exact TS18003 "no inputs" error this file's
+    // comment above describes. `checkJs` stays off (the default): the .mjs
+    // file is included as a build input so referencing it doesn't error, but
+    // its contents aren't type-checked.
+    "allowJs": true
   },
   "include": ["scripts/**/*.mjs", "playwright.config.ts"]
 }

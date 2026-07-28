@@ -4,7 +4,20 @@ import { fileURLToPath, URL } from 'node:url'
 
 export default defineConfig({
   plugins: [react()],
-  resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+  resolve: {
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // vite-plugin-pwa's real `virtual:pwa-register` module only resolves
+      // inside an actual Vite/PWA build pipeline — this config deliberately
+      // doesn't load the VitePWA plugin itself (doing so pulls in the same
+      // esbuild/jsdom TextEncoder incompatibility documented in
+      // src/__tests__/pwaConfig.test.ts, project-wide instead of in one
+      // file). Aliasing the specifier to a real, tiny stub module gives
+      // src/pwa.ts something to resolve under Vitest; see
+      // src/test/pwaRegisterStub.ts.
+      'virtual:pwa-register': fileURLToPath(new URL('./src/test/pwaRegisterStub.ts', import.meta.url)),
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,

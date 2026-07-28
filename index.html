@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#FFFFFF" />
+
+    <!-- iOS ignores the web manifest's icons entirely and needs its own
+      -  link + meta tags to install as a standalone app off "Add to Home
+      -  Screen" rather than a plain bookmark. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="HYROX Training" />
+
     <title>HYROX Training</title>
   </head>
   <body>
