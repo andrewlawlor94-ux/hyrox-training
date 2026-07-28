@@ -1,8 +1,8 @@
 import type { FC } from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { completeSet, upsertSet } from '@/data/repositories'
+import { completeSet, undoSet, upsertSet } from '@/data/repositories'
 import type { StrengthSet, Unit } from '@/data/types'
-import { Button, NumberField } from '@/components'
+import { Button, Chip, NumberField } from '@/components'
 import type { UseAutosaveResult } from './useAutosave'
 
 interface SetRowProps {
@@ -29,11 +29,17 @@ interface SetRowProps {
  * `autosave`; the merged, up-to-date `weight`/`reps`/`rir` triple is what
  * gets written, never a partial patch.
  *
- * The complete control is disabled once completed OR while its own write is
- * in flight — Button's `disabled` maps to the native attribute, which blocks
- * a second dispatch outright — and `completeSet` is idempotent by load
- * (loads the row first, no-ops if already completed), so even a write that
- * somehow slips through a race can't double-complete.
+ * The complete/undo control is disabled only while its own write is in
+ * flight — Button's `disabled` maps to the native attribute, which blocks a
+ * second dispatch outright — and both `completeSet` and `undoSet` are
+ * idempotent by load (load the row first, no-op if already in the target
+ * state), so even a write that somehow slips through a race can't
+ * double-apply. Completing passes the row's own CURRENTLY-DISPLAYED
+ * weight/reps/rir straight to `completeSet` so the one-tap flow (accept the
+ * prefill, tap Complete, touch nothing) actually logs what was shown —
+ * `completeSet` writes those values and `isCompleted` together, atomically.
+ * Undo only flips `isCompleted` back off; it deliberately never touches
+ * weight/reps/rir, so a corrected number survives a re-complete.
  *
  * `lastKnown*` refs distinguish an EXTERNAL write (another client, or this
  * exercise's "Use target" acting on a different row's `upsertSet` call) from
@@ -98,8 +104,13 @@ export const SetRow: FC<SetRowProps> = ({ set, index, defaultWeight, defaultUnit
     if (set.isCompleted || isCompleting) return
     setIsCompleting(true)
     try {
+      // Flushes any still-debounced edit first so a stale pending write
+      // (scheduled before this tap, carrying `isCompleted: false` in its
+      // closure) can never land AFTER `completeSet` and silently revert the
+      // completion -- then `completeSet` itself writes the row's current,
+      // on-screen weight/reps/rir together with `isCompleted`.
       await autosave.flushKey(set.id)
-      await completeSet(set.id, new Date().toISOString())
+      await completeSet(set.id, new Date().toISOString(), { weight, reps, rir, unit })
       onCompleted()
     } catch (err) {
       console.error('Failed to complete set', err)
@@ -108,11 +119,27 @@ export const SetRow: FC<SetRowProps> = ({ set, index, defaultWeight, defaultUnit
     }
   }
 
+  async function handleUndo(): Promise<void> {
+    if (!set.isCompleted || isCompleting) return
+    setIsCompleting(true)
+    try {
+      await undoSet(set.id)
+      // Deliberately no call to `onCompleted()` here -- undo must never
+      // start or otherwise touch the rest timer that completing began; the
+      // athlete may legitimately be resting while fixing a mistapped set.
+    } catch (err) {
+      console.error('Failed to undo set', err)
+    } finally {
+      setIsCompleting(false)
+    }
+  }
+
   const rowNumber = index + 1
+  const rowClassName = set.isCompleted ? 'set-row set-row--completed' : 'set-row'
 
   return (
-    <div className="set-row">
-      <span className="set-row__index">{rowNumber}</span>
+    <div className={rowClassName}>
+      <span className="set-row__index" aria-hidden="true">{set.isCompleted ? '✓' : rowNumber}</span>
       <NumberField
         id={`set-weight-${set.id}`}
         label={`Weight, set ${String(rowNumber)}`}
@@ -142,15 +169,19 @@ export const SetRow: FC<SetRowProps> = ({ set, index, defaultWeight, defaultUnit
         inputMode="numeric"
         placeholder="RIR"
       />
-      <Button
-        variant={set.isCompleted ? 'secondary' : 'primary'}
-        size="sm"
-        aria-label={`Complete set ${String(rowNumber)}`}
-        disabled={set.isCompleted || isCompleting}
-        onClick={() => { void handleComplete() }}
-      >
-        {set.isCompleted ? 'Done' : 'Complete'}
-      </Button>
+      <div className="set-row__action-cell">
+        {set.isCompleted && <Chip tone="green">Logged</Chip>}
+        <Button
+          variant={set.isCompleted ? 'secondary' : 'primary'}
+          size="sm"
+          className={set.isCompleted ? 'set-row__action--done' : undefined}
+          aria-label={set.isCompleted ? `Undo set ${String(rowNumber)}` : `Complete set ${String(rowNumber)}`}
+          disabled={isCompleting}
+          onClick={() => { void (set.isCompleted ? handleUndo() : handleComplete()) }}
+        >
+          {set.isCompleted ? 'Undo' : 'Complete'}
+        </Button>
+      </div>
     </div>
   )
 }

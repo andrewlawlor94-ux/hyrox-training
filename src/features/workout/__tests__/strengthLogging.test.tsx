@@ -190,6 +190,39 @@ describe('strength logging screen', () => {
     })
   })
 
+  it('completing a set with no edits at all (the intended one-tap flow) persists the prefilled weight and reps, not undefined', async () => {
+    await seedPastSession('ex_back_squat', '2026-07-20', { weight: 175, reps: 5, unit: 'lb', rir: 2 }, 4)
+    const instanceId = await createWorkout([{ exerciseId: 'ex_back_squat' }])
+    await renderWorkout(instanceId)
+    await screen.findByText('Back squat')
+    await waitFor(() => { expect(screen.getAllByLabelText<HTMLInputElement>(/weight/i)).toHaveLength(4) })
+
+    // Every row prefills at the recommended target (180 lb x 5 - see the
+    // "prefills every planned set row" test above) -- tap Complete on all
+    // four WITHOUT touching a single field, exactly the one-tap flow the
+    // requirements call for.
+    for (let i = 0; i < 4; i += 1) {
+      const completeButton = await screen.findByRole('button', { name: new RegExp(`complete set ${String(i + 1)}`, 'i') })
+      await userEvent.click(completeButton)
+    }
+
+    await waitFor(async () => {
+      const sets = await db.strengthSets.where('instanceId').equals(instanceId).toArray()
+      const completed = sets.filter((s) => s.isCompleted)
+      expect(completed).toHaveLength(4)
+      for (const set of completed) {
+        expect(set.weight).toBe(180)
+        expect(set.reps).toBe(5)
+        // The unit must also survive the one-tap complete: exerciseHistory
+        // requires weight, reps, AND unit before a session counts as usable
+        // history for a future recommendation — see the analogous defect
+        // this project already shipped for weight/reps.
+        expect(set.unit).toBe('lb')
+        expect(set.completedAt).toBeDefined()
+      }
+    })
+  })
+
   it('completing a set starts the rest timer using that exercise\'s defaultRestSec', async () => {
     const instanceId = await createWorkout([{ exerciseId: 'ex_back_squat' }])
     await renderWorkout(instanceId)
@@ -200,6 +233,74 @@ describe('strength logging screen', () => {
     await waitFor(async () => {
       const state = await getTimerState()
       expect(state?.totalSec).toBe(150) // ex_back_squat.defaultRestSec
+      expect(state?.label).toBe('Back squat')
+    })
+  })
+
+  describe('undoing a completed set', () => {
+    it('turns the control into an enabled Undo affordance once a set is completed', async () => {
+      const instanceId = await createWorkout([{ exerciseId: 'ex_back_squat' }])
+      await renderWorkout(instanceId)
+      await screen.findByText('Back squat')
+
+      await userEvent.click(await screen.findByRole('button', { name: /complete set 1/i }))
+
+      const undoButton = await screen.findByRole('button', { name: /undo set 1/i })
+      expect(undoButton).not.toBeDisabled()
+      expect(screen.queryByRole('button', { name: /complete set 1/i })).toBeNull()
+    })
+
+    it('tapping Undo clears isCompleted while preserving the logged weight and reps', async () => {
+      await seedPastSession('ex_back_squat', '2026-07-20', { weight: 175, reps: 5, unit: 'lb', rir: 2 }, 4)
+      const instanceId = await createWorkout([{ exerciseId: 'ex_back_squat' }])
+      await renderWorkout(instanceId)
+      await screen.findByText('Back squat')
+      await waitFor(() => { expect(screen.getAllByLabelText<HTMLInputElement>(/weight/i)).toHaveLength(4) })
+
+      await userEvent.click(await screen.findByRole('button', { name: /complete set 1/i }))
+      await waitFor(async () => {
+        const sets = await db.strengthSets.where('instanceId').equals(instanceId).toArray()
+        expect(sets.find((s) => s.setIndex === 0)?.isCompleted).toBe(true)
+      })
+
+      await userEvent.click(await screen.findByRole('button', { name: /undo set 1/i }))
+
+      await waitFor(async () => {
+        const sets = await db.strengthSets.where('instanceId').equals(instanceId).toArray()
+        const undone = sets.find((s) => s.setIndex === 0)
+        expect(undone?.isCompleted).toBe(false)
+        expect(undone?.completedAt).toBeUndefined()
+        expect(undone?.weight).toBe(180)
+        expect(undone?.reps).toBe(5)
+      })
+      // The control flips back to "Complete" once undone, and the values
+      // stay visible on screen -- nothing was cleared from the display.
+      expect(await screen.findByRole('button', { name: /complete set 1/i })).toBeInTheDocument()
+      expect(screen.getAllByLabelText<HTMLInputElement>(/weight/i)[0]?.value).toBe('180')
+    })
+
+    it('undoing a set does not touch the rest timer that completing it started', async () => {
+      const instanceId = await createWorkout([{ exerciseId: 'ex_back_squat' }])
+      await renderWorkout(instanceId)
+      await screen.findByText('Back squat')
+
+      await userEvent.click(await screen.findByRole('button', { name: /complete set 1/i }))
+      await waitFor(async () => {
+        const state = await getTimerState()
+        expect(state?.totalSec).toBe(150)
+      })
+
+      await userEvent.click(await screen.findByRole('button', { name: /undo set 1/i }))
+
+      // The rest timer the athlete may legitimately still be sitting through
+      // must be untouched by undo -- same totalSec/label as right after
+      // completing, not cleared and not restarted.
+      await waitFor(async () => {
+        const sets = await db.strengthSets.where('instanceId').equals(instanceId).toArray()
+        expect(sets.find((s) => s.setIndex === 0)?.isCompleted).toBe(false)
+      })
+      const state = await getTimerState()
+      expect(state?.totalSec).toBe(150)
       expect(state?.label).toBe('Back squat')
     })
   })
