@@ -46,6 +46,35 @@ export function strengthVolumeFor(weekNumber: number): StrengthVolume {
   return FULL_VOLUME
 }
 
+/**
+ * Target RIR by phase (§ target RIR fix), driven by week number the same
+ * way `strengthVolumeFor` is -- one lookup rather than a literal repeated on
+ * every prescription. Guidance only: the UI shows this in the target block,
+ * but the athlete's own reported RIR (never this value) is what
+ * `recommendStrengthTarget` actually reads -- see `Prescription.targetRir`.
+ *
+ * - **Base** (1-6): RIR 3 for everything -- the athlete is new to this
+ *   volume and carrying shin/sciatic risk, so conservative dosing applies
+ *   even to the two main barbell lifts.
+ * - **Build** (7-12): main lifts tighten to RIR 2; accessories stay at 3.
+ * - **Race-specific** (13-18): both converge at RIR 2.
+ * - **Specific prep** (19-22): main lifts tighten further to RIR 1 (this
+ *   phase's whole point is peak specificity/intensity); accessories hold at 2.
+ * - **Taper** (23-24): back to RIR 3 for everything -- the taper exists to
+ *   arrive fresh, not to grind out a new intensity PR days before the race.
+ *
+ * A main compound barbell lift (back squat, bench press) never gets a HIGHER
+ * (easier) target RIR than an accessory in the same week -- it can always run
+ * at least as close to failure.
+ */
+export function targetRirFor(weekNumber: number, isMainLift: boolean): number {
+  if (weekNumber >= 23) return 3 // Taper
+  if (weekNumber >= 19) return isMainLift ? 1 : 2 // Specific prep
+  if (weekNumber >= 13) return 2 // Race-specific
+  if (weekNumber >= 7) return isMainLift ? 2 : 3 // Build
+  return 3 // Base
+}
+
 function estMinutesFor(weekNumber: number): number {
   if (weekNumber >= 22) return 35
   if (weekNumber >= 13) return 40
@@ -67,12 +96,12 @@ function week1LoadFields(weekNumber: number, targetLoad: number, loadUnit: Unit,
 export function buildStrengthA(weekNumber: number, sequenceInWeek: number, priority: Priority): SeedTemplate {
   const vol = strengthVolumeFor(weekNumber)
   const prescriptions: SeedPrescription[] = [
-    { exerciseId: 'ex_back_squat', order: 0, sets: vol.squatSets, repMin: 4, repMax: 6, restSec: positiveRestSec('ex_back_squat', 150), ...week1LoadFields(weekNumber, 175, 'lb', 'totalBarbell') },
-    { exerciseId: 'ex_romanian_deadlift', order: 1, sets: vol.rdlSets, repMin: 6, repMax: 8, restSec: positiveRestSec('ex_romanian_deadlift', 120), ...week1LoadFields(weekNumber, 135, 'lb', 'totalBarbell') },
-    { exerciseId: 'ex_split_squat', order: 2, sets: vol.splitSquatSets, repMin: 8, repMax: 10, restSec: positiveRestSec('ex_split_squat', 90), ...week1LoadFields(weekNumber, 25, 'lb', 'perDumbbell') },
+    { exerciseId: 'ex_back_squat', order: 0, sets: vol.squatSets, repMin: 4, repMax: 6, restSec: positiveRestSec('ex_back_squat', 150), targetRir: targetRirFor(weekNumber, true), ...week1LoadFields(weekNumber, 175, 'lb', 'totalBarbell') },
+    { exerciseId: 'ex_romanian_deadlift', order: 1, sets: vol.rdlSets, repMin: 6, repMax: 8, restSec: positiveRestSec('ex_romanian_deadlift', 120), targetRir: targetRirFor(weekNumber, false), ...week1LoadFields(weekNumber, 135, 'lb', 'totalBarbell') },
+    { exerciseId: 'ex_split_squat', order: 2, sets: vol.splitSquatSets, repMin: 8, repMax: 10, restSec: positiveRestSec('ex_split_squat', 90), targetRir: targetRirFor(weekNumber, false), ...week1LoadFields(weekNumber, 25, 'lb', 'perDumbbell') },
     { exerciseId: 'ex_sled_push', order: 3, sets: vol.sledPushReps, distanceM: 12.5, restSec: positiveRestSec('ex_sled_push', 90) },
     { exerciseId: 'ex_sled_pull', order: 4, sets: vol.sledPullReps, distanceM: 12.5, restSec: positiveRestSec('ex_sled_pull', 90) },
-    { exerciseId: 'ex_pallof_press', order: 5, sets: vol.pallofSets, repMin: 10, repMax: 12, restSec: positiveRestSec('ex_pallof_press', 45) },
+    { exerciseId: 'ex_pallof_press', order: 5, sets: vol.pallofSets, repMin: 10, repMax: 12, restSec: positiveRestSec('ex_pallof_press', 45), targetRir: targetRirFor(weekNumber, false) },
   ]
   return {
     sessionSlot: 1,
@@ -91,9 +120,9 @@ export function buildStrengthA(weekNumber: number, sequenceInWeek: number, prior
 export function buildStrengthB(weekNumber: number, sequenceInWeek: number, priority: Priority): SeedTemplate {
   const vol = strengthVolumeFor(weekNumber)
   const prescriptions: SeedPrescription[] = [
-    { exerciseId: 'ex_bench_press', order: 0, sets: vol.benchSets, repMin: 5, repMax: 8, restSec: positiveRestSec('ex_bench_press', 120), ...week1LoadFields(weekNumber, 140, 'lb', 'totalBarbell') },
-    { exerciseId: 'ex_lat_pulldown', order: 1, sets: vol.pulldownSets, repMin: 6, repMax: 10, restSec: positiveRestSec('ex_lat_pulldown', 60) },
-    { exerciseId: 'ex_walking_lunge', order: 2, sets: vol.walkingLungeSets, distanceM: 18, restSec: positiveRestSec('ex_walking_lunge', 90) },
+    { exerciseId: 'ex_bench_press', order: 0, sets: vol.benchSets, repMin: 5, repMax: 8, restSec: positiveRestSec('ex_bench_press', 120), targetRir: targetRirFor(weekNumber, true), ...week1LoadFields(weekNumber, 140, 'lb', 'totalBarbell') },
+    { exerciseId: 'ex_lat_pulldown', order: 1, sets: vol.pulldownSets, repMin: 6, repMax: 10, restSec: positiveRestSec('ex_lat_pulldown', 60), targetRir: targetRirFor(weekNumber, false) },
+    { exerciseId: 'ex_walking_lunge', order: 2, sets: vol.walkingLungeSets, distanceM: 18, restSec: positiveRestSec('ex_walking_lunge', 90), targetRir: targetRirFor(weekNumber, false) },
     {
       exerciseId: 'ex_farmer_carry', order: 3, sets: vol.farmerCarryReps, distanceM: 50, restSec: positiveRestSec('ex_farmer_carry', 90),
       notes: 'Building toward 2x24 kg per hand.',

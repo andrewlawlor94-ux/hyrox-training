@@ -26,6 +26,9 @@ export interface SeedPrescription {
   restSec: number
   intervalSpec?: IntervalSpec
   notes?: string
+  /** Guidance only -- see `Prescription.targetRir`'s doc comment for why this
+   * must never be read as a prefill. */
+  targetRir?: number
 }
 
 /** One of the plan's six weekly session slots (§8/§19). */

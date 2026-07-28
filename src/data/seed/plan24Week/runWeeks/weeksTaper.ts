@@ -1,5 +1,6 @@
 import type { Priority } from '@/data/types'
 import { positiveRestSec } from '../stationCircuits'
+import { targetRirFor } from '../strengthTemplates'
 import type { SeedTemplate } from '../types'
 import { buildEasyRunTemplate, buildIntervalQualityTemplate } from './runBuilders'
 import { buildHybridTemplate } from './hybridTemplates'
@@ -80,8 +81,11 @@ export function buildRaceWeekTechniqueTemplate(sequenceInWeek: number, priority:
     estMinutes: 20,
     notes: 'Light technique and mobility only -- not a training stimulus this close to race day.',
     prescriptions: [
-      { exerciseId: 'ex_split_squat', order: 0, sets: 2, repMin: 8, repMax: 8, restSec: positiveRestSec('ex_split_squat', 90) },
-      { exerciseId: 'ex_pallof_press', order: 1, sets: 2, repMin: 10, repMax: 10, restSec: positiveRestSec('ex_pallof_press', 45) },
+      // This template is only ever built for week 24 (see `buildTemplateForSlot`
+      // in `weeks.ts`) -- the literal week number below is `targetRirFor`'s
+      // Taper-phase RIR, not a stand-in for "whatever week this is".
+      { exerciseId: 'ex_split_squat', order: 0, sets: 2, repMin: 8, repMax: 8, restSec: positiveRestSec('ex_split_squat', 90), targetRir: targetRirFor(24, false) },
+      { exerciseId: 'ex_pallof_press', order: 1, sets: 2, repMin: 10, repMax: 10, restSec: positiveRestSec('ex_pallof_press', 45), targetRir: targetRirFor(24, false) },
     ],
   }
 }

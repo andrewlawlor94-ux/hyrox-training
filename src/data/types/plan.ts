@@ -85,4 +85,15 @@ export interface Prescription {
   restSec: number
   intervalSpec?: IntervalSpec
   notes?: string
+  /**
+   * Guidance only, shown alongside the prescribed sets/reps (§ target RIR
+   * fix) — NEVER read to prefill a `StrengthSet.rir` input. Prefilling would
+   * fabricate an observation the athlete never made and silently drive
+   * `recommendStrengthTarget`'s confident-increase rule off it, exactly the
+   * bug class the strength-logging fix (Task 30) just fixed in reverse.
+   * Present only for exercises where a target RIR is meaningful: strength
+   * progression work, not HYROX stations (fixed competition loads, never
+   * auto-progress) or body-weight/rehab movements.
+   */
+  targetRir?: number
 }

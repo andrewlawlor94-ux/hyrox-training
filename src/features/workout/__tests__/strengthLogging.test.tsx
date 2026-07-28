@@ -25,6 +25,7 @@ interface PrescriptionSpec {
   targetLoad?: number
   loadUnit?: Unit
   notes?: string
+  targetRir?: number
 }
 
 let instanceCounter = 0
@@ -54,6 +55,7 @@ async function createWorkout(specs: PrescriptionSpec[], opts?: { status?: Workou
       ...(spec.targetLoad !== undefined ? { targetLoad: spec.targetLoad } : {}),
       ...(spec.loadUnit !== undefined ? { loadUnit: spec.loadUnit } : {}),
       ...(spec.notes !== undefined ? { notes: spec.notes } : {}),
+      ...(spec.targetRir !== undefined ? { targetRir: spec.targetRir } : {}),
     })
   }
   return instanceId
@@ -151,6 +153,32 @@ describe('strength logging screen', () => {
     expect(screen.getByText(/Today's target: 180 lb × 5/)).toBeInTheDocument()
     expect(screen.getByText('You completed all prescribed reps last time.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /use target/i })).toBeInTheDocument()
+  })
+
+  it('shows the plan\'s target RIR compactly alongside the prescribed sets/reps, not as its own line', async () => {
+    const instanceId = await createWorkout([{ exerciseId: 'ex_back_squat', targetRir: 2 }])
+    await renderWorkout(instanceId)
+
+    expect(await screen.findByText('Back squat')).toBeInTheDocument()
+    expect(screen.getByText('4 × 4–6 · target RIR 2')).toBeInTheDocument()
+  })
+
+  it('omits any target RIR text when the prescription has none', async () => {
+    const instanceId = await createWorkout([{ exerciseId: 'ex_back_squat' }])
+    await renderWorkout(instanceId)
+
+    expect(await screen.findByText('Back squat')).toBeInTheDocument()
+    expect(screen.getByText('4 × 4–6')).toBeInTheDocument()
+    expect(screen.queryByText(/target RIR/)).toBeNull()
+  })
+
+  it('never prefills the RIR input from the plan\'s target RIR — the athlete reports it, or leaves it blank', async () => {
+    const instanceId = await createWorkout([{ exerciseId: 'ex_back_squat', targetRir: 2 }])
+    await renderWorkout(instanceId)
+    await screen.findByText('Back squat')
+    await waitFor(() => { expect(screen.getAllByLabelText<HTMLInputElement>(/^rir/i)).toHaveLength(4) })
+
+    for (const input of screen.getAllByLabelText<HTMLInputElement>(/^rir/i)) expect(input.value).toBe('')
   })
 
   it('shows last week\'s weight when a session exists in the previous calendar week', async () => {

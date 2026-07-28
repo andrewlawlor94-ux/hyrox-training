@@ -24,13 +24,21 @@ function formatShortDate(date: string): string {
   return `${abbreviation} ${String(day)}`
 }
 
+/**
+ * The prescribed sets/reps, with the plan's target RIR folded onto the same
+ * line (`4 × 4–6 · target RIR 2`) rather than a whole new line of prose per
+ * exercise (§ target RIR fix) — guidance only, never a prefill; see
+ * `Prescription.targetRir`'s doc comment. Omitted entirely when the
+ * prescription carries none (a station, a body-weight movement, etc.).
+ */
 function repRangeLabel(prescription: InstancePrescription, exercise: Exercise): string {
   const sets = prescription.sets ?? exercise.defaultSets ?? 0
   const repMin = prescription.repMin ?? exercise.repMin
   const repMax = prescription.repMax ?? exercise.repMax
-  if (repMin === undefined) return `${String(sets)} sets`
-  const repLabel = repMax !== undefined && repMax !== repMin ? `${String(repMin)}–${String(repMax)}` : String(repMin)
-  return `${String(sets)} × ${repLabel}`
+  const base = repMin === undefined
+    ? `${String(sets)} sets`
+    : `${String(sets)} × ${repMax !== undefined && repMax !== repMin ? `${String(repMin)}–${String(repMax)}` : String(repMin)}`
+  return prescription.targetRir !== undefined ? `${base} · target RIR ${String(prescription.targetRir)}` : base
 }
 
 /**
