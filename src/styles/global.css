@@ -114,3 +114,64 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .error-boundary { padding: var(--space-5); text-align: center; }
 .error-boundary__title { font-size: var(--font-size-xl); font-weight: 600; margin: 0 0 var(--space-2); color: var(--elevated); }
 .error-boundary__message { margin: 0 0 var(--space-4); color: var(--text-muted); font-size: var(--font-size-sm); word-break: break-word; }
+
+/* ---------- App shell / boot ---------- */
+.boot-gate__loading, .app-shell__loading { padding: var(--space-5); color: var(--text-muted); }
+.app-shell { display: flex; flex-direction: column; min-height: 100vh; }
+.app-shell__main {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--space-4);
+  padding-top: calc(var(--space-4) + var(--safe-top));
+  padding-left: calc(var(--space-4) + var(--safe-left));
+  padding-right: calc(var(--space-4) + var(--safe-right));
+  /* Fixed nav below sits on top of unpadded content otherwise — this is the
+     one padding rule that has to account for both the nav's own height and
+     the home-indicator safe area beneath it. */
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom));
+}
+
+/* ---------- BottomNav (fixed, never a hamburger, text label always present) ---------- */
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+.bottom-nav__list { display: flex; width: 100%; margin: 0; padding: 0; list-style: none; }
+.bottom-nav__item { flex: 1; display: flex; }
+.bottom-nav__link {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap-min);
+  text-decoration: none;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+.bottom-nav__link--active { color: var(--accent); }
+
+/* ---------- HomeScreen / SettingsScreen / OnboardingScreen (minimal for Task 18/19) ---------- */
+.home-screen, .settings-screen, .onboarding-screen { display: flex; flex-direction: column; gap: var(--space-4); }
+.home-screen__loading, .settings-screen__loading { padding: var(--space-5); color: var(--text-muted); }
+.home-screen__heading, .settings-screen__heading, .onboarding-screen__heading { font-size: var(--font-size-2xl); margin: 0; }
+.home-screen__date { margin: 0; color: var(--text-muted); }
+.home-screen__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.home-screen__slot { font-weight: 600; margin: 0 0 var(--space-1); }
+.home-screen__status { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
+.settings-screen__section { display: flex; flex-direction: column; gap: var(--space-2); }
+.onboarding-screen__description { margin: 0; color: var(--text-muted); }
+
+/* ---------- DbErrorScreen (never a blank screen on a boot failure) ---------- */
+.db-error-screen { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); text-align: center; }
+.db-error-screen__title { font-size: var(--font-size-xl); font-weight: 600; margin: 0; color: var(--elevated); }
+.db-error-screen__message { margin: 0; color: var(--text-muted); }
+.db-error-screen__actions { display: flex; gap: var(--space-3); justify-content: center; flex-wrap: wrap; }
+.db-error-screen__export-error { margin: 0; color: var(--elevated); font-size: var(--font-size-sm); }

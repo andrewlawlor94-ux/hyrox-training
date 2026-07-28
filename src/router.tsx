@@ -1,0 +1,50 @@
+import type { FC } from 'react'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { ErrorBoundary } from '@/components'
+import { AppShell } from '@/features/shell/AppShell'
+import { HomeScreen } from '@/features/shell/HomeScreen'
+import { SettingsScreen } from '@/features/settings/SettingsScreen'
+import { OnboardingScreen } from '@/features/onboarding/OnboardingScreen'
+
+/**
+ * Only three destinations exist today: Home and Settings (both nav tabs,
+ * laid out inside `AppShell`) and Onboarding (full-screen, reached before
+ * either tab is meaningful). The brief's fuller route table — Workout,
+ * Progress, Plan, the Week/Workout editors, the exercise library — belongs
+ * to later tasks; wiring those paths now, with no screen behind them, would
+ * be the exact placeholder/dead-route pattern the Global Constraints
+ * forbid. Each is added the task its screen lands, mirroring how
+ * `BottomNav`'s `NAV_ITEMS` array grows. Any unmatched path falls back to
+ * Home rather than a blank 404.
+ */
+export const AppRoutes: FC = () => (
+  <Routes>
+    <Route
+      path="/onboarding"
+      element={(
+        <ErrorBoundary>
+          <OnboardingScreen />
+        </ErrorBoundary>
+      )}
+    />
+    <Route element={<AppShell />}>
+      <Route
+        path="/"
+        element={(
+          <ErrorBoundary>
+            <HomeScreen />
+          </ErrorBoundary>
+        )}
+      />
+      <Route
+        path="/settings"
+        element={(
+          <ErrorBoundary>
+            <SettingsScreen />
+          </ErrorBoundary>
+        )}
+      />
+    </Route>
+    <Route path="*" element={<Navigate to="/" replace />} />
+  </Routes>
+)

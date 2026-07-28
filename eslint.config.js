@@ -5,7 +5,12 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default tseslint.config(
-  { ignores: ['dist', 'dev-dist', 'coverage', 'playwright-report', 'test-results', 'node_modules'] },
+  // '.claude/worktrees/**' matters beyond tidiness: a concurrent session's
+  // git worktree can live nested inside this one's own root, with its own
+  // tsconfig-relative file set — without this, typescript-eslint's
+  // "parserOptions.project" tries to type-check those files against THIS
+  // worktree's tsconfig and fails on every one of them.
+  { ignores: ['dist', 'dev-dist', 'coverage', 'playwright-report', 'test-results', 'node_modules', '.claude/worktrees/**'] },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommendedTypeChecked],
