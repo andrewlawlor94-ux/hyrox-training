@@ -158,16 +158,41 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 }
 .bottom-nav__link--active { color: var(--accent); }
 
-/* ---------- HomeScreen / SettingsScreen / OnboardingScreen (minimal for Task 18/19) ---------- */
-.home-screen, .settings-screen, .onboarding-screen { display: flex; flex-direction: column; gap: var(--space-4); }
+/* ---------- HomeScreen / SettingsScreen (minimal for Task 18) ---------- */
+.home-screen, .settings-screen { display: flex; flex-direction: column; gap: var(--space-4); }
 .home-screen__loading, .settings-screen__loading { padding: var(--space-5); color: var(--text-muted); }
-.home-screen__heading, .settings-screen__heading, .onboarding-screen__heading { font-size: var(--font-size-2xl); margin: 0; }
+.home-screen__heading, .settings-screen__heading { font-size: var(--font-size-2xl); margin: 0; }
 .home-screen__date { margin: 0; color: var(--text-muted); }
 .home-screen__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
 .home-screen__slot { font-weight: 600; margin: 0 0 var(--space-1); }
 .home-screen__status { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
 .settings-screen__section { display: flex; flex-direction: column; gap: var(--space-2); }
-.onboarding-screen__description { margin: 0; color: var(--text-muted); }
+
+/* ---------- Onboarding (race date -> profile -> goal) ---------- */
+.onboarding-step { display: flex; flex-direction: column; gap: var(--space-4); padding-bottom: var(--space-6); }
+.onboarding-step__heading { font-size: var(--font-size-2xl); margin: 0; }
+.onboarding-step__intro { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
+.onboarding-field { display: flex; flex-direction: column; gap: var(--space-1); }
+.onboarding-field__label { font-size: var(--font-size-sm); font-weight: 600; color: var(--text-muted); }
+.onboarding-field__input, .onboarding-field__textarea {
+  min-height: var(--tap-min);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg);
+  color: var(--text);
+}
+.onboarding-field__textarea { resize: vertical; }
+.onboarding-field__error { margin: 0; color: var(--elevated); font-size: var(--font-size-sm); }
+.onboarding-step__feedback { display: flex; flex-direction: column; gap: var(--space-1); }
+.onboarding-step__note { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
+.onboarding-step__warning { margin: 0; color: var(--caution); font-size: var(--font-size-sm); font-weight: 600; }
+.onboarding-step__deferred-date { margin: 0; color: var(--text); font-size: var(--font-size-sm); font-weight: 600; }
+.onboarding-step__actions { display: flex; gap: var(--space-3); }
+.onboarding-step__milestones { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; }
+.onboarding-step__milestone { display: flex; justify-content: space-between; gap: var(--space-3); }
+.onboarding-step__milestone dt { color: var(--text-muted); font-size: var(--font-size-sm); }
+.onboarding-step__milestone dd { margin: 0; font-weight: 600; }
 
 /* ---------- DbErrorScreen (never a blank screen on a boot failure) ---------- */
 .db-error-screen { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); text-align: center; }

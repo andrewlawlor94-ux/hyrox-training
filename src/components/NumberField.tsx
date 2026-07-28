@@ -12,6 +12,7 @@ type NumberFieldProps = {
   id: string
   inputMode?: 'decimal' | 'numeric'
   hideLabel?: boolean
+  placeholder?: string
 }
 
 function toText(value: number | null): string {
@@ -47,6 +48,7 @@ export const NumberField: FC<NumberFieldProps> = ({
   id,
   inputMode = 'decimal',
   hideLabel = false,
+  placeholder,
 }) => {
   const [text, setText] = useState(() => toText(value))
   const isFocused = useRef(false)
@@ -91,6 +93,7 @@ export const NumberField: FC<NumberFieldProps> = ({
           type="text"
           inputMode={inputMode}
           value={text}
+          placeholder={placeholder}
           onChange={handleChange}
           onFocus={handleFocus}
           onBlur={handleBlur}

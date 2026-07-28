@@ -105,7 +105,10 @@ describe('app shell', () => {
     await seedTestDb()
     renderApp({ route: '/settings' })
 
-    await screen.findByRole('heading', { name: /onboarding/i })
+    // The onboarding wizard's first step heading is "Race date" (Task 19),
+    // not the literal word "onboarding" — this asserts the redirect landed
+    // on the onboarding route's actual first screen.
+    await screen.findByRole('heading', { name: /race date/i })
     expect(screen.queryByRole('navigation', { name: /primary/i })).toBeNull()
   })
 

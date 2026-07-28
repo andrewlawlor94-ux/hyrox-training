@@ -1,17 +1,63 @@
 import type { FC } from 'react'
+import { useToday } from '@/hooks/useToday'
+import { useOnboarding } from './useOnboarding'
+import { RaceDateStep } from './RaceDateStep'
+import { ProfileStep } from './ProfileStep'
+import { GoalStep } from './GoalStep'
 
 /**
- * Placeholder for Task 18 only: the router's `/onboarding` route needs a
- * real target the moment `AppShell` starts redirecting to it, but the
- * actual three-step wizard (race date, profile, goal) is Task 19's
- * deliverable in the very next commit, which replaces this file's contents
- * entirely. No interactive elements here — nothing to click, so nothing
- * that could be a "fake button" — just an honest acknowledgement of the
- * step while it's being built.
+ * Three-step wizard (race date -> profile -> goal). All step/field state
+ * and the finishing write sequence live in `useOnboarding`; this component
+ * only picks which step to render and wires its callbacks.
  */
-export const OnboardingScreen: FC = () => (
-  <div className="onboarding-screen">
-    <h1 className="onboarding-screen__heading">Onboarding</h1>
-    <p className="onboarding-screen__description">Setting up your race date, profile, and goal…</p>
-  </div>
-)
+export const OnboardingScreen: FC = () => {
+  const today = useToday()
+  const onboarding = useOnboarding(today)
+  const { fields } = onboarding
+
+  if (onboarding.step === 'raceDate') {
+    return (
+      <RaceDateStep
+        raceDate={fields.raceDate}
+        onChange={(value) => onboarding.setField('raceDate', value)}
+        anchor={onboarding.anchor}
+        error={onboarding.raceDateError}
+        onContinue={onboarding.continueFromRaceDate}
+      />
+    )
+  }
+
+  if (onboarding.step === 'profile') {
+    return (
+      <ProfileStep
+        age={fields.age}
+        heightIn={fields.heightIn}
+        weightLb={fields.weightLb}
+        bodyFatPct={fields.bodyFatPct}
+        considerations={fields.considerations}
+        error={onboarding.profileError}
+        onChangeAge={(value) => onboarding.setField('age', value)}
+        onChangeHeight={(value) => onboarding.setField('heightIn', value)}
+        onChangeWeight={(value) => onboarding.setField('weightLb', value)}
+        onChangeBodyFat={(value) => onboarding.setField('bodyFatPct', value)}
+        onChangeConsiderations={(value) => onboarding.setField('considerations', value)}
+        onBack={onboarding.back}
+        onContinue={onboarding.continueFromProfile}
+      />
+    )
+  }
+
+  return (
+    <GoalStep
+      targetText={fields.targetText}
+      stretchText={fields.stretchText}
+      targets={onboarding.targets}
+      error={onboarding.goalError}
+      isFinishing={onboarding.isFinishing}
+      onChangeTarget={(value) => onboarding.setField('targetText', value)}
+      onChangeStretch={(value) => onboarding.setField('stretchText', value)}
+      onBack={onboarding.back}
+      onFinish={() => { void onboarding.finish() }}
+    />
+  )
+}
