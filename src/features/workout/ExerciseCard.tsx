@@ -5,6 +5,7 @@ import { addSet, removeSet, saveStationLog, upsertSet } from '@/data/repositorie
 import type { StationLog } from '@/data/types'
 import { useRestTimer } from '@/features/timer/useRestTimer'
 import { STATION_BY_EXERCISE_ID } from './constants'
+import { hasUnknownLoad } from './loadPresentation'
 import { SetRow } from './SetRow'
 import { TargetHeader } from './TargetHeader'
 import { useAutosave } from './useAutosave'
@@ -27,12 +28,18 @@ const StrengthCard: FC<StrengthCardProps> = ({ item }) => {
   const { start } = useRestTimer()
 
   const prefillLoad = recommendation.isOptionalAim && recommendation.previous ? recommendation.previous.load : recommendation.target
+  // No prefilled weight at all when the target is unknown (§ fix: "target:
+  // 0 lb" at a machine reads as broken, not helpful) — the athlete's own
+  // first entry becomes the baseline for future recommendations instead.
+  const unknownLoad = hasUnknownLoad(exercise, recommendation)
+  const defaultWeight = unknownLoad ? null : prefillLoad.value
 
   function handleCompleted(): void {
     start({ exerciseId: exercise.id, label: exercise.name, totalSec: exercise.defaultRestSec }).catch(logAndIgnore)
   }
 
   async function handleUseTarget(): Promise<void> {
+    if (unknownLoad) return // Nothing to apply — see TargetHeader, which hides this control in that case too.
     const row = sets.find((s) => !s.isCompleted) ?? sets[sets.length - 1]
     if (!row) return
     await upsertSet({ ...row, weight: recommendation.target.value, unit: recommendation.target.unit })
@@ -73,7 +80,7 @@ const StrengthCard: FC<StrengthCardProps> = ({ item }) => {
             key={set.id}
             set={set}
             index={index}
-            defaultWeight={prefillLoad.value}
+            defaultWeight={defaultWeight}
             defaultUnit={prefillLoad.unit}
             defaultReps={targetReps}
             autosave={autosave}

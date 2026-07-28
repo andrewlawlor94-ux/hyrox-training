@@ -31,7 +31,10 @@ export const WorkoutScreen: FC = () => {
 
   return (
     <div className="workout-screen">
-      <h1 className="workout-screen__heading">{`Week ${String(data.instance.weekNumber)} · Session ${String(data.instance.sessionSlot)}`}</h1>
+      <div className="workout-screen__header">
+        {data.templateName && <p className="workout-screen__name">{data.templateName}</p>}
+        <h1 className="workout-screen__heading">{`Week ${String(data.instance.weekNumber)} · Session ${String(data.instance.sessionSlot)}`}</h1>
+      </div>
       <div className="workout-screen__exercises">
         {data.exercises.map((item) => (
           <ExerciseCard key={item.prescription.id} item={item} />

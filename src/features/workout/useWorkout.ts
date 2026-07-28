@@ -33,6 +33,10 @@ export type WorkoutExerciseVM = StrengthExerciseVM | StationExerciseVM
 
 export interface WorkoutData {
   instance: WorkoutInstance
+  /** The owning `WorkoutTemplate`'s name (e.g. "Strength A maintenance"), so
+   * the athlete opening a session sees what it actually is, not just its
+   * week/slot position. Empty string if the template is somehow missing. */
+  templateName: string
   exercises: WorkoutExerciseVM[]
 }
 
@@ -79,6 +83,7 @@ async function loadWorkout(instanceId: string, today: ISODate): Promise<WorkoutD
   const loaded = await getInstanceWithPrescriptions(instanceId)
   if (!loaded) return undefined
   const { instance, prescriptions } = loaded
+  const template = await db.workoutTemplates.get(instance.templateId)
 
   const exercises: WorkoutExerciseVM[] = []
   for (const prescription of prescriptions) {
@@ -103,7 +108,7 @@ async function loadWorkout(instanceId: string, today: ISODate): Promise<WorkoutD
     }
   }
 
-  return { instance, exercises }
+  return { instance, templateName: template?.name ?? '', exercises }
 }
 
 /**

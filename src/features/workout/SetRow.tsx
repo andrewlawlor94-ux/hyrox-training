@@ -8,7 +8,11 @@ import type { UseAutosaveResult } from './useAutosave'
 interface SetRowProps {
   set: StrengthSet
   index: number
-  defaultWeight: number
+  /** `null` when the recommended target load is unknown (see
+   * `loadPresentation.hasUnknownLoad`) — the row starts genuinely empty
+   * rather than prefilled at a meaningless `0`, so the athlete's own first
+   * entry becomes the baseline for future recommendations. */
+  defaultWeight: number | null
   defaultUnit: Unit
   defaultReps: number
   autosave: UseAutosaveResult

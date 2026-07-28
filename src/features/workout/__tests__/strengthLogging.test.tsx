@@ -29,10 +29,14 @@ interface PrescriptionSpec {
 
 let instanceCounter = 0
 
-async function createWorkout(specs: PrescriptionSpec[], opts?: { status?: WorkoutStatus }): Promise<string> {
+async function createWorkout(specs: PrescriptionSpec[], opts?: { status?: WorkoutStatus; templateName?: string }): Promise<string> {
   instanceCounter += 1
   const instanceId = `wi_test_${String(instanceCounter)}`
   const templateId = `tmpl_test_${String(instanceCounter)}`
+  await db.workoutTemplates.add({
+    id: templateId, planId: 'plan_test', planWeekId: 'week_test', sessionSlot: 1, sequenceInWeek: 1,
+    name: opts?.templateName ?? '', kind: 'strength', priority: 'essential', recoveryTags: [], estMinutes: 45, notes: '',
+  })
   await db.workoutInstances.add({
     id: instanceId, planId: 'plan_test', templateId, weekNumber: 1, sessionSlot: 1,
     plannedDate: TODAY, scheduledDate: TODAY, sequence: 1, priority: 'essential',
@@ -358,5 +362,54 @@ describe('strength logging screen', () => {
     await screen.findByText('Back squat')
 
     expect(document.body.scrollWidth).toBeLessThanOrEqual(375)
+  })
+
+  describe('zero-load target presentation (fix pass)', () => {
+    it('barbell exercise, real seeded target, no history: shows the seeded weight normally', async () => {
+      const instanceId = await createWorkout([{ exerciseId: 'ex_back_squat', targetLoad: 175, loadUnit: 'lb' }])
+      await renderWorkout(instanceId)
+      await screen.findByText('Back squat')
+
+      expect(screen.getByText(/Today's target: 175 lb × 4/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /use target/i })).toBeInTheDocument()
+      await waitFor(() => { expect(screen.getAllByLabelText<HTMLInputElement>(/weight/i)).toHaveLength(4) })
+      for (const input of screen.getAllByLabelText<HTMLInputElement>(/weight/i)) expect(input.value).toBe('175')
+    })
+
+    it('body-weight exercise, no seeded target, no history: reads "body weight", not "0 lb" or "unknown"', async () => {
+      const instanceId = await createWorkout([{ exerciseId: 'ex_pull_up' }])
+      await renderWorkout(instanceId)
+      await screen.findByText('Pull-up')
+
+      expect(screen.getByText(/Today's target: body weight × 5/)).toBeInTheDocument()
+      expect(screen.queryByText(/0 lb/)).toBeNull()
+      expect(screen.queryByText(/set your own load/i)).toBeNull()
+      // Zero added load IS the real recommendation here, so Use target stays
+      // available and every row still prefills at it (not left blank).
+      expect(screen.getByRole('button', { name: /use target/i })).toBeInTheDocument()
+      await waitFor(() => { expect(screen.getAllByLabelText<HTMLInputElement>(/weight/i)).toHaveLength(3) })
+      for (const input of screen.getAllByLabelText<HTMLInputElement>(/weight/i)) expect(input.value).toBe('0')
+    })
+
+    it('machine exercise, no seeded target, no history: prompts to set a load instead of printing "0 lb"', async () => {
+      const instanceId = await createWorkout([{ exerciseId: 'ex_pallof_press' }])
+      await renderWorkout(instanceId)
+      await screen.findByText('Pallof press')
+
+      expect(screen.getByText(/Today's target: 10 reps · set your own load/)).toBeInTheDocument()
+      expect(screen.queryByText(/0 lb/)).toBeNull()
+      // Nothing to "use" — the control is absent rather than a no-op.
+      expect(screen.queryByRole('button', { name: /use target/i })).toBeNull()
+      await waitFor(() => { expect(screen.getAllByLabelText<HTMLInputElement>(/weight/i)).toHaveLength(3) })
+      for (const input of screen.getAllByLabelText<HTMLInputElement>(/weight/i)) expect(input.value).toBe('')
+    })
+  })
+
+  it('renders the session template name alongside the week/session line', async () => {
+    const instanceId = await createWorkout([{ exerciseId: 'ex_back_squat' }], { templateName: 'Strength A maintenance' })
+    await renderWorkout(instanceId)
+
+    expect(await screen.findByText('Strength A maintenance')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Week 1 · Session 1')
   })
 })

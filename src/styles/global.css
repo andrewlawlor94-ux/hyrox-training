@@ -221,6 +221,8 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 /* ---------- WorkoutScreen (§8: one scrolling screen, everything expanded) ---------- */
 .workout-screen { display: flex; flex-direction: column; gap: var(--space-4); }
 .workout-screen__loading { padding: var(--space-5); color: var(--text-muted); }
+.workout-screen__header { display: flex; flex-direction: column; gap: var(--space-1); }
+.workout-screen__name { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
 .workout-screen__heading { font-size: var(--font-size-2xl); margin: 0; }
 .workout-screen__exercises { display: flex; flex-direction: column; gap: var(--space-4); }
 

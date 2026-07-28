@@ -4,6 +4,7 @@ import type { StrengthRecommendation } from '@/domain/recommendations/strengthTa
 import { formatLoad } from '@/domain/units/format'
 import { Button } from '@/components'
 import { SHORT_MONTH_NAMES } from './constants'
+import { hasUnknownLoad, targetLoadLabel } from './loadPresentation'
 
 interface TargetHeaderProps {
   exercise: Exercise
@@ -39,27 +40,39 @@ function repRangeLabel(prescription: InstancePrescription, exercise: Exercise): 
  * one-sentence reason. Never a prefill by itself — `onUseTarget` is the only
  * thing here that writes, and only on an explicit tap.
  */
-export const TargetHeader: FC<TargetHeaderProps> = ({ exercise, prescription, recommendation, targetReps, onUseTarget }) => (
-  <div className="target-header">
-    <div className="target-header__title-row">
-      <h3 className="target-header__name">{exercise.name}</h3>
-      <span className="target-header__scheme">{repRangeLabel(prescription, exercise)}</span>
+export const TargetHeader: FC<TargetHeaderProps> = ({ exercise, prescription, recommendation, targetReps, onUseTarget }) => {
+  const unknownLoad = hasUnknownLoad(exercise, recommendation)
+
+  return (
+    <div className="target-header">
+      <div className="target-header__title-row">
+        <h3 className="target-header__name">{exercise.name}</h3>
+        <span className="target-header__scheme">{repRangeLabel(prescription, exercise)}</span>
+      </div>
+      {recommendation.previous && (
+        <p className="target-header__line">
+          {`Last: ${formatLoad(recommendation.previous.load)} × ${String(recommendation.previous.reps)} · ${formatShortDate(recommendation.previous.date)}`}
+        </p>
+      )}
+      {recommendation.lastWeek && (
+        <p className="target-header__line">{`Last week: ${formatLoad(recommendation.lastWeek.load)}`}</p>
+      )}
+      <div className="target-header__target-row">
+        {unknownLoad ? (
+          <p className="target-header__line target-header__target">
+            {`Today's target: ${String(targetReps)} reps · set your own load`}
+          </p>
+        ) : (
+          <>
+            <p className="target-header__line target-header__target">
+              {`Today's target: ${targetLoadLabel(exercise, recommendation)} × ${String(targetReps)}`}
+              {recommendation.isOptionalAim ? ' (optional aim)' : ''}
+            </p>
+            <Button variant="secondary" size="sm" onClick={onUseTarget}>Use target</Button>
+          </>
+        )}
+      </div>
+      <p className="target-header__reason">{recommendation.reason}</p>
     </div>
-    {recommendation.previous && (
-      <p className="target-header__line">
-        {`Last: ${formatLoad(recommendation.previous.load)} × ${String(recommendation.previous.reps)} · ${formatShortDate(recommendation.previous.date)}`}
-      </p>
-    )}
-    {recommendation.lastWeek && (
-      <p className="target-header__line">{`Last week: ${formatLoad(recommendation.lastWeek.load)}`}</p>
-    )}
-    <div className="target-header__target-row">
-      <p className="target-header__line target-header__target">
-        {`Today's target: ${formatLoad(recommendation.target)} × ${String(targetReps)}`}
-        {recommendation.isOptionalAim ? ' (optional aim)' : ''}
-      </p>
-      <Button variant="secondary" size="sm" onClick={onUseTarget}>Use target</Button>
-    </div>
-    <p className="target-header__reason">{recommendation.reason}</p>
-  </div>
-)
+  )
+}
