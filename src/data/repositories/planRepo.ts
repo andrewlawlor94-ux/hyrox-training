@@ -62,7 +62,10 @@ export async function installSeedPlan(args: { today: ISODate; raceDate: ISODate;
     }
     await db.plans.add(newPlan)
 
-    await materializePlan({ planId: newPlan.id, planStartDate: anchor.planStartDate, baseWeeksCount: anchor.baseWeeks })
+    await materializePlan({
+      planId: newPlan.id, planStartDate: anchor.planStartDate,
+      baseWeeksCount: anchor.baseWeeks, coreWeeksCount: anchor.coreWeeks,
+    })
 
     const others = await db.plans.where('status').equals('active').toArray()
     for (const p of others) {
@@ -160,17 +163,35 @@ export async function restoreSeedPlanPreservingHistory(args: { today: ISODate; n
 
     const keptPlanWeekIds = new Set(oldTemplates.filter((t) => keptTemplateIds.has(t.id)).map((t) => t.planWeekId))
     const oldPlanWeeks = await db.planWeeks.where('planId').equals(activePlan.id).toArray()
+    const oldPhases = await db.planPhases.where('planId').equals(activePlan.id).toArray()
+
+    // Re-derive the base/core split from the active race goal, which is the
+    // authoritative statement of how long this plan should be. The previous
+    // `weeksCount - PLAN_WEEKS_DEFAULT` silently assumed every plan is
+    // `baseWeeks + 24`, which is false for a compressed plan (race closer than
+    // 24 weeks out): it clamped base weeks to zero and then regenerated all 24
+    // core weeks, re-introducing sessions dated after race day.
+    //
+    // With no active goal there is nothing to anchor to, and the operation's
+    // purpose is "restore the original plan" — so fall back to the full seed,
+    // never to a truncated one.
+    const goal = await db.raceGoals.filter((g) => g.isActive).first()
+    const anchor = goal ? anchorPlan({ today: activePlan.startDate, raceDate: goal.raceDate }) : undefined
+    const baseWeeksCount = anchor?.baseWeeks ?? 0
+    const coreWeeksCount = anchor?.coreWeeks ?? PLAN_WEEKS_DEFAULT
+
     const existingPlanWeeks = new Map<number, PlanWeek>(oldPlanWeeks.filter((w) => keptPlanWeekIds.has(w.id)).map((w) => [w.weekNumber, w]))
     await db.planWeeks.bulkDelete(oldPlanWeeks.filter((w) => !keptPlanWeekIds.has(w.id)).map((w) => w.id))
 
     const keptPhaseIds = new Set([...existingPlanWeeks.values()].map((w) => w.phaseId))
-    const oldPhases = await db.planPhases.where('planId').equals(activePlan.id).toArray()
     await db.planPhases.bulkDelete(oldPhases.filter((p) => !keptPhaseIds.has(p.id)).map((p) => p.id))
 
     const skipSlots = new Set(keepInstances.map((i) => `${String(i.weekNumber)}:${String(i.sessionSlot)}`))
-    const baseWeeksCount = Math.max(0, activePlan.weeksCount - PLAN_WEEKS_DEFAULT)
 
-    await materializePlan({ planId: activePlan.id, planStartDate: activePlan.startDate, baseWeeksCount, existingPlanWeeks, skipSlots })
+    await materializePlan({
+      planId: activePlan.id, planStartDate: activePlan.startDate,
+      baseWeeksCount, coreWeeksCount, existingPlanWeeks, skipSlots,
+    })
 
     return activePlan
   })

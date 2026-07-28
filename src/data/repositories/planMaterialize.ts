@@ -17,7 +17,10 @@ import { newId } from './ids'
  * placeholder sessions the athlete edits during onboarding); this mirrors
  * `BASE_SESSION_SPECS`' fixed five-slot order in `@/domain/planGeneration/baseWeeks`. */
 const BASE_KIND_BY_SLOT: Record<number, WorkoutKind> = { 1: 'strength', 2: 'run', 3: 'zone2', 4: 'strength', 5: 'run' }
-const BASE_PHASE_NAME = 'Prologue'
+/** Phase name given to generated Base weeks. Exported because
+ * `restoreSeedPlanPreservingHistory` counts stored Base weeks by phase name to
+ * recover the base/core split without needing a race goal. */
+export const BASE_PHASE_NAME = 'Prologue'
 
 function plannedDateFor(weekNumber: number, sessionSlot: number, planStartDate: ISODate): ISODate {
   const offset = SLOT_DAY_OFFSET[sessionSlot] ?? 0
@@ -28,6 +31,14 @@ export interface MaterializeArgs {
   planId: string
   planStartDate: ISODate
   baseWeeksCount: number
+  /**
+   * How many of the 24 core seed weeks to materialize. `anchorPlan` compresses
+   * this below `PLAN_WEEKS_DEFAULT` when the race is closer than 24 weeks out,
+   * and materializing all 24 regardless would create sessions dated after race
+   * day — the queue would correctly refuse to schedule them, leaving the plan
+   * showing weeks that can never happen. Always pass `anchor.coreWeeks`.
+   */
+  coreWeeksCount: number
   /** Weeks that already exist in the database (from a prior install) and
    * must be reused rather than duplicated — keyed by the FINAL (offset)
    * week number. */
@@ -129,14 +140,33 @@ export async function materializePlan(args: MaterializeArgs): Promise<void> {
     })
   }
 
-  for (const week of SEED_WEEKS_24) {
-    const finalWeekNumber = args.baseWeeksCount + week.weekNumber
+  // A compressed plan keeps the LAST `coreWeeksCount` seed weeks, not the first.
+  // The taper and race-specific work must survive: dropping from the end would
+  // leave the athlete arriving at race day mid-Build with no taper at all,
+  // whereas dropping from the front only costs early aerobic base volume.
+  const survivingCoreWeeks = SEED_WEEKS_24
+    .slice(Math.max(0, SEED_WEEKS_24.length - args.coreWeeksCount))
+    .map((week, index) => ({ week, finalWeekNumber: args.baseWeeksCount + index + 1 }))
+
+  // Phase ranges are derived from the weeks that actually survived, because a
+  // compressed plan can truncate or drop a phase entirely and the seed's own
+  // ranges would then point at weeks that do not exist.
+  const phaseBounds = new Map<string, { start: number; end: number }>()
+  for (const { week, finalWeekNumber } of survivingCoreWeeks) {
+    const name = phaseForWeek(week.weekNumber).name
+    const bounds = phaseBounds.get(name)
+    if (bounds) bounds.end = finalWeekNumber
+    else phaseBounds.set(name, { start: finalWeekNumber, end: finalWeekNumber })
+  }
+
+  for (const { week, finalWeekNumber } of survivingCoreWeeks) {
     const phase = phaseForWeek(week.weekNumber)
+    const range = phaseBounds.get(phase.name) ?? { start: finalWeekNumber, end: finalWeekNumber }
     await materializeWeek({
       planId: args.planId, planStartDate: args.planStartDate, finalWeekNumber,
       isDeload: week.isDeload, label: week.label, ...(week.notes !== undefined ? { notes: week.notes } : {}),
       phaseName: phase.name, phaseFocus: phase.focus,
-      phaseRange: { start: args.baseWeeksCount + phase.weekStart, end: args.baseWeeksCount + phase.weekEnd },
+      phaseRange: { start: range.start, end: range.end },
       sessions: week.templates.map((t) => ({
         sessionSlot: t.sessionSlot, sequenceInWeek: t.sequenceInWeek, name: t.name, kind: t.kind,
         priority: t.priority, recoveryTags: t.recoveryTags, estMinutes: t.estMinutes,
