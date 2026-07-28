@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { SEED_EXERCISES } from '@/data/seed/exercises'
 import { MIN_EFFECTIVE_WEEK_SESSIONS } from '@/domain/queue/constants'
 import { SEED_WEEKS_24 } from '../index'
-import type { SeedTemplate } from '../index'
+import type { SeedTemplate, SeedWeek } from '../index'
 
 const VALID_EXERCISE_IDS = new Set<string>(SEED_EXERCISES.map((e): string => e.id))
 const weekByNumber = (n: number) => {
@@ -17,6 +17,26 @@ const templateBySlot = (weekNumber: number, slot: number): SeedTemplate => {
 }
 const allTemplates = () => SEED_WEEKS_24.flatMap((w) => w.templates)
 const allPrescriptions = () => allTemplates().flatMap((t) => t.prescriptions)
+
+/**
+ * The 8 HYROX station exercises are dual/triple-use in this plan, so
+ * exerciseId alone can't identify "real station-circuit content":
+ * - `ex_ski_erg`/`ex_row` are also the Zone 2 conditioning exercise (built
+ *   with `durationSec`, no `distanceM`/`repMin`).
+ * - `ex_sled_push`/`ex_sled_pull`/`ex_farmer_carry`/`ex_burpee_broad_jump`/
+ *   `ex_ski_erg` are also fixed-prescription Strength A/B accessory work
+ *   (multiple sets at a literal distance, nothing to do with race-volume
+ *   percentage).
+ * Every station-circuit prescription, in contrast, is built by the single
+ * shared `buildStationPrescription` helper (`stationCircuits.ts`), which
+ * always sets `sets: 1` (one continuous station effort within a circuit) and
+ * never sets `durationSec`. That combination is what actually identifies
+ * race-volume-scaled station content, structurally, not just by exercise id.
+ */
+const STATION_EXERCISE_IDS = new Set([
+  'ex_ski_erg', 'ex_sled_push', 'ex_sled_pull', 'ex_burpee_broad_jump', 'ex_row', 'ex_farmer_carry', 'ex_sandbag_lunge', 'ex_wall_ball',
+])
+const hasStationPrescription = (t: SeedTemplate) => t.prescriptions.some((p) => STATION_EXERCISE_IDS.has(p.exerciseId) && p.durationSec === undefined && p.sets === 1)
 
 describe('SEED_WEEKS_24 structure', () => {
   it('has exactly 24 weeks, numbered 1..24 with no gaps', () => {
@@ -149,6 +169,23 @@ describe('SEED_WEEKS_24 structure', () => {
     expect(weekPct[16]!).toBeLessThan(weekPct[17]!)
   })
 
+  it('every template with a defined stationVolumePct contains at least one station prescription', () => {
+    const withPct = allTemplates().filter((t) => t.stationVolumePct !== undefined)
+    expect(withPct.length).toBeGreaterThan(0)
+    for (const t of withPct) {
+      expect(hasStationPrescription(t), `"${t.name}" (week slot ${String(t.sessionSlot)}) has stationVolumePct but no station prescription`).toBe(true)
+    }
+  })
+
+  it('every template with station prescriptions in weeks 13-21 has a defined stationVolumePct', () => {
+    const weeks13to21 = SEED_WEEKS_24.filter((w) => w.weekNumber >= 13 && w.weekNumber <= 21)
+    const withStations = weeks13to21.flatMap((w) => w.templates).filter(hasStationPrescription)
+    expect(withStations.length).toBeGreaterThan(0)
+    for (const t of withStations) {
+      expect(t.stationVolumePct, `"${t.name}" has station prescriptions but no stationVolumePct`).toBeDefined()
+    }
+  })
+
   it('every template referencing Wall ball carries the overhead-clearance note', () => {
     const wallBallTemplates = allTemplates().filter((t) => t.prescriptions.some((p) => p.exerciseId === 'ex_wall_ball'))
     expect(wallBallTemplates.length).toBeGreaterThan(0)
@@ -211,14 +248,18 @@ describe('SEED_WEEKS_24 structure', () => {
   })
 
   it('is deeply frozen: mutation attempts throw, and re-building the module is deterministic', async () => {
+    // Cast through a mutable type rather than `@ts-expect-error` + a readonly
+    // violation: this represents "a caller that (wrongly) treats the seed
+    // data as mutable JS", which is exactly the runtime case `deepFreeze`
+    // exists to guard -- and it resolves cleanly for typed linting, unlike
+    // deliberately-broken TS expressions whose resulting type is `any`.
     const week1 = SEED_WEEKS_24[0]!
+    const mutableWeeks = SEED_WEEKS_24 as unknown as SeedWeek[]
     expect(() => {
-      // @ts-expect-error -- intentional runtime mutation attempt against a readonly type
-      week1.templates[0].name = 'mutated'
+      week1.templates[0]!.name = 'mutated'
     }).toThrow()
     expect(() => {
-      // @ts-expect-error -- intentional runtime mutation attempt against a readonly array
-      SEED_WEEKS_24.push(week1)
+      mutableWeeks.push(week1)
     }).toThrow()
 
     // Two independent module instantiations produce deeply-equal (but not

@@ -48,25 +48,44 @@ export function phaseForWeek(weekNumber: number): SeedPhase {
 /**
  * D7: the four essential slots per phase, derived from §19's per-phase list.
  * Slot 3 (Zone 2) is always `optional` and is deliberately not listed here.
- * The `important` slot is whichever of {2, 6} is not essential that phase:
  *
- * - Base and Taper protect running *frequency* (the easy run, slot 2) as
- *   essential, since durability work rides on it and this is either the
- *   frequency-building phase or the pre-race durability-protection phase.
- * - Build, Race-specific, and Specific prep protect the higher-value
- *   specificity session (long run / hybrid / simulation, slot 6) as
- *   essential once race-specific conditioning is the point of the phase.
+ * - **Base**: one strength-maintenance session isn't yet the rule (strength
+ *   is still full-volume) -- essential is the easy run, quality run, and
+ *   both strength sessions; slot 6 (long run) is `important`.
+ * - **Build**: the progressive long run/hybrid session is essential (this is
+ *   where race-specific conditioning is actually being built); the easy run
+ *   is `important`.
+ * - **Race-specific and Specific prep** (corrected by controller audit
+ *   against the source brief): the per-phase essential list is *one*
+ *   strength-maintenance session (slot 1), the quality run, the easy run,
+ *   and the hybrid/race-specific session (slot 6) -- NOT two strength
+ *   sessions. Strength is deliberately reduced to maintenance dosing in this
+ *   phase precisely so slot 5 (Strength B) can be the one that's expendable
+ *   under compression, not the easy run. The easy run carries the three
+ *   lower-leg durability exercises (straight-knee calf raise, bent-knee calf
+ *   raise, tibialis raise) that the whole plan's shin-durability strategy
+ *   depends on -- for an athlete whose limiter is running durability and
+ *   whose main injury risk is shin symptoms, that session must never be the
+ *   one sacrificed to protect a second strength day. Station exposure is
+ *   still guaranteed regardless, since slot 6 (hybrid/simulation) is itself
+ *   essential.
+ * - **Taper** (same correction): essential is the key race-paced session
+ *   (quality run), the easy aerobic session, the light strength/technique
+ *   session (slot 1), and the race/race-preparation session (slot 6, e.g.
+ *   week 23's "Light station technique"). Slot 5 -- a second strength
+ *   session the brief doesn't list at all this late -- is `important`.
  *
- * This mapping is this implementation's own documented ruling (the source
- * brief's literal §19 per-phase list is not available in this repo) -- see
- * the Task 15 report for the full rationale.
+ * This mapping was originally guessed as slot-6-essential across the board
+ * (matching Build) for every non-Base/Taper phase; a controller audit against
+ * the source brief corrected Race-specific, Specific prep, and Taper to the
+ * one-strength-session shape above. See the Task 15 report for the audit.
  */
 export const PHASE_TYPICAL_PRIORITY: Readonly<Record<string, { essentialSlots: readonly number[]; importantSlot: number }>> = {
   Base: { essentialSlots: [1, 2, 4, 5], importantSlot: 6 },
   Build: { essentialSlots: [1, 4, 5, 6], importantSlot: 2 },
-  'Race-specific': { essentialSlots: [1, 4, 5, 6], importantSlot: 2 },
-  'Specific prep': { essentialSlots: [1, 4, 5, 6], importantSlot: 2 },
-  Taper: { essentialSlots: [1, 2, 4, 5], importantSlot: 6 },
+  'Race-specific': { essentialSlots: [1, 2, 4, 6], importantSlot: 5 },
+  'Specific prep': { essentialSlots: [1, 2, 4, 6], importantSlot: 5 },
+  Taper: { essentialSlots: [1, 2, 4, 6], importantSlot: 5 },
 }
 
 /** Slot 3 (Zone 2) is always optional -- never part of the essential/important split above. */

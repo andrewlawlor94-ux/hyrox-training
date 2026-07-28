@@ -5,6 +5,7 @@ import { RUN_PROGRESSION, buildRaceWeekTechniqueTemplate, buildZone2Template } f
 import type { SeedTemplate, SeedWeek } from './types'
 
 const TOTAL_WEEKS = 24
+const MIN_EFFECTIVE_WEEK_SESSIONS = 4
 const DELOAD_WEEKS = new Set([4, 8])
 /** Reduced-to-minimum weeks (D5): every one of these carries only its
  * essential four sessions -- see `weeks.test.ts`/`priorities.test.ts`. */
@@ -45,7 +46,6 @@ function slotsForWeek(weekNumber: number): readonly number[] {
  * minimum leaves no room for a non-essential session).
  */
 function priorityForSlot(weekSlots: readonly number[], slot: number, importantSlot: number): Priority {
-  const MIN_EFFECTIVE_WEEK_SESSIONS = 4
   if (weekSlots.length <= MIN_EFFECTIVE_WEEK_SESSIONS) return 'essential'
   if (slot === ZONE2_SLOT) return 'optional'
   if (slot === importantSlot) return 'important'
@@ -73,6 +73,23 @@ function buildTemplateForSlot(weekNumber: number, slot: number, sequenceInWeek: 
   }
 }
 
+/**
+ * Cross-checks `priorityForSlot`'s output against `typical.essentialSlots`
+ * so that constant is genuinely load-bearing rather than descriptive-only:
+ * editing one of `essentialSlots`/`importantSlot` without the other now
+ * throws at build time instead of silently drifting apart. Skipped for
+ * reduced-to-minimum weeks (<= 4 slots present), where D5 overrides the
+ * phase's typical split entirely (every present session is essential).
+ */
+function assertMatchesTypicalEssentialSlots(weekNumber: number, weekSlots: readonly number[], templates: readonly SeedTemplate[], essentialSlots: readonly number[]): void {
+  if (weekSlots.length <= MIN_EFFECTIVE_WEEK_SESSIONS) return
+  const actual = templates.filter((t) => t.priority === 'essential').map((t) => t.sessionSlot).sort((a, b) => a - b)
+  const expected = essentialSlots.filter((slot) => weekSlots.includes(slot)).sort((a, b) => a - b)
+  if (actual.length !== expected.length || actual.some((slot, i) => slot !== expected[i])) {
+    throw new Error(`Week ${String(weekNumber)}: essential slots ${JSON.stringify(actual)} do not match typical.essentialSlots ${JSON.stringify(expected)}`)
+  }
+}
+
 function buildWeek(weekNumber: number): SeedWeek {
   const phase = phaseForWeek(weekNumber)
   const typical = PHASE_TYPICAL_PRIORITY[phase.name]
@@ -81,6 +98,7 @@ function buildWeek(weekNumber: number): SeedWeek {
   const templates = weekSlots.map((slot, sequenceInWeek) =>
     buildTemplateForSlot(weekNumber, slot, sequenceInWeek, priorityForSlot(weekSlots, slot, typical.importantSlot)),
   )
+  assertMatchesTypicalEssentialSlots(weekNumber, weekSlots, templates, typical.essentialSlots)
   const notes = WEEK_NOTES[weekNumber]
   return {
     weekNumber,

@@ -25,17 +25,16 @@ export function buildEasyRunTemplate(minutes: number, sequenceInWeek: number, pr
 interface LongRunOptions {
   name?: string
   notes?: string
-  /** Week 16's consolidation dip: no station work happens this week, but the
-   * week-level station-volume figure still needs to read 40% (non-decreasing
-   * everywhere else 13->21) so it lives on this template too. */
-  stationVolumePct?: number
 }
 
 /** Plain long run (slot 6, Base/Build phases before hybrid conditioning
- * begins, and the week 16 consolidation dip). */
+ * begins). Deliberately has no `stationVolumePct` option: a plain long run
+ * carries no station prescriptions, and that field must never appear on a
+ * template with no station content (controller-corrected -- see
+ * `weeksRaceSpecific.ts`'s week 16, which uses a real reduced hybrid instead
+ * of a long run precisely because it needs a genuine station percentage). */
 export function buildLongRunTemplate(minutes: number, sequenceInWeek: number, priority: Priority, opts: LongRunOptions = {}): SeedTemplate {
   const noteFields = opts.notes !== undefined ? { notes: opts.notes } : {}
-  const stationPctFields = opts.stationVolumePct !== undefined ? { stationVolumePct: opts.stationVolumePct } : {}
   return {
     sessionSlot: 6,
     sequenceInWeek,
@@ -45,7 +44,6 @@ export function buildLongRunTemplate(minutes: number, sequenceInWeek: number, pr
     recoveryTags: ['longRun'],
     estMinutes: minutes,
     ...noteFields,
-    ...stationPctFields,
     prescriptions: [
       { exerciseId: 'ex_long_run', order: 0, durationSec: minutes * 60, restSec: positiveRestSec('ex_long_run', 60) },
     ],

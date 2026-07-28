@@ -1,4 +1,4 @@
-import { buildContinuousRunTemplate, buildEasyRunTemplate, buildIntervalQualityTemplate, buildLongRunTemplate } from './runBuilders'
+import { buildContinuousRunTemplate, buildEasyRunTemplate, buildIntervalQualityTemplate } from './runBuilders'
 import { buildCompromisedQualityTemplate, buildHybridTemplate } from './hybridTemplates'
 import type { WeekRunEntry } from './types'
 
@@ -12,8 +12,11 @@ const EASY_MINUTES: Record<number, number> = { 13: 40, 14: 40, 15: 40, 16: 35, 1
  * Weeks 13-18 (Race-specific phase), per §19/§8: station volume climbs
  * 50/60/70/(40 dip)/75/75%, culminating in the week 18 full-format
  * simulation -- the near-full rehearsal, about six weeks from race day (D4).
- * Week 16 is the consolidation dip: reduced volume, no dedicated station
- * work, 5 sessions instead of 6.
+ * Week 16 is the consolidation dip: reduced *volume* (4 rounds vs. 6-7 in the
+ * surrounding weeks), 5 sessions instead of 6 -- but still genuine station
+ * content at 40%, not a plain long run carrying a meaningless percentage
+ * (controller-corrected: a `stationVolumePct` field must never appear on a
+ * template with no station prescriptions).
  */
 export function buildRaceSpecificWeekRunEntries(): Record<number, WeekRunEntry> {
   const entries: Record<number, WeekRunEntry> = {}
@@ -45,9 +48,10 @@ export function buildRaceSpecificWeekRunEntries(): Record<number, WeekRunEntry> 
   entries[16] = {
     easy: buildEasyRunTemplate(EASY_MINUTES[16] ?? 35, 0, 'important'),
     quality: buildIntervalQualityTemplate(4, 90, 0, 'essential', { workDistanceM: 1000, name: 'Quality run (1 km reps)' }),
-    slotSix: buildLongRunTemplate(55, 0, 'essential', {
+    slotSix: buildHybridTemplate(4, 4, 0, 'essential', {
       stationVolumePct: 40,
-      notes: 'Consolidation week: dedicated station work is paused; running volume holds through this long run and the quality reps.',
+      name: 'Hybrid: 4 rounds (1 km + station), consolidation',
+      notes: 'Consolidation week: reduced hybrid volume (4 rounds, 40% station volume) rather than a full circuit, easing into the final race-specific push.',
     }),
     zone2Minutes: 0,
   }

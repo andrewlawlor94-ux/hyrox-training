@@ -9,6 +9,15 @@ import { SEED_WEEKS_24 } from '../index'
  * present. Reduced-to-minimum (four-template) weeks have no important/
  * optional slot at all: every present session is essential (D5).
  *
+ * Weeks 13-24 were corrected by a controller audit against the source
+ * brief: the brief's actual per-phase essential list for Race-specific,
+ * Specific prep, and Taper is *one* strength-maintenance session (slot 1),
+ * the quality run (slot 4), the easy run (slot 2), and the hybrid/race
+ * session (slot 6) -- not two strength sessions. The easy run carries the
+ * plan's shin-durability work and must not be the session sacrificed to
+ * protect a second strength day under compression. See `phases.ts`'s
+ * `PHASE_TYPICAL_PRIORITY` doc comment for the full rationale.
+ *
  * Written by hand here, independently of `PHASE_TYPICAL_PRIORITY` in
  * `phases.ts`, so this test pins the intended design rather than checking
  * the implementation against itself.
@@ -26,17 +35,17 @@ const EXPECTED: Record<number, { essential: number[]; important?: number; option
   10: { essential: [1, 4, 5, 6], important: 2, optional: 3 },
   11: { essential: [1, 4, 5, 6], important: 2, optional: 3 },
   12: { essential: [1, 2, 4, 6] },
-  13: { essential: [1, 4, 5, 6], important: 2, optional: 3 },
-  14: { essential: [1, 4, 5, 6], important: 2, optional: 3 },
-  15: { essential: [1, 4, 5, 6], important: 2, optional: 3 },
-  16: { essential: [1, 4, 5, 6], important: 2 },
-  17: { essential: [1, 4, 5, 6], important: 2, optional: 3 },
+  13: { essential: [1, 2, 4, 6], important: 5, optional: 3 },
+  14: { essential: [1, 2, 4, 6], important: 5, optional: 3 },
+  15: { essential: [1, 2, 4, 6], important: 5, optional: 3 },
+  16: { essential: [1, 2, 4, 6], important: 5 },
+  17: { essential: [1, 2, 4, 6], important: 5, optional: 3 },
   18: { essential: [1, 4, 5, 6] },
-  19: { essential: [1, 4, 5, 6], important: 2, optional: 3 },
-  20: { essential: [1, 4, 5, 6], important: 2, optional: 3 },
+  19: { essential: [1, 2, 4, 6], important: 5, optional: 3 },
+  20: { essential: [1, 2, 4, 6], important: 5, optional: 3 },
   21: { essential: [1, 4, 5, 6] },
-  22: { essential: [1, 4, 5, 6], important: 2 },
-  23: { essential: [1, 2, 4, 5], important: 6, optional: 3 },
+  22: { essential: [1, 2, 4, 6], important: 5 },
+  23: { essential: [1, 2, 4, 6], important: 5, optional: 3 },
   24: { essential: [1, 2, 4, 6] },
 }
 
@@ -101,5 +110,23 @@ describe('priorities (D7)', () => {
     for (const week of SEED_WEEKS_24) {
       expect(week.templates.filter((t) => t.priority === 'essential').length).toBeGreaterThanOrEqual(4)
     }
+  })
+
+  it('in weeks 13-22, the easy-run-bearing template is essential whenever it is scheduled that week', () => {
+    // Controller-corrected regression guard: the easy run carries the three
+    // lower-leg durability exercises the plan's shin-durability strategy
+    // depends on, so it must never be downgraded to `important` (and so
+    // sacrificed under compression) in favour of a second strength session.
+    let weeksWithEasyRun = 0
+    for (let n = 13; n <= 22; n += 1) {
+      const week = weekByNumber(n)
+      const easyRunTemplate = week.templates.find((t) => t.prescriptions.some((p) => p.exerciseId === 'ex_easy_run'))
+      if (!easyRunTemplate) continue // weeks 18 and 21 don't schedule slot 2 at all that week
+      weeksWithEasyRun += 1
+      expect(easyRunTemplate.priority, `week ${String(n)} easy run should be essential`).toBe('essential')
+    }
+    // Non-vacuous: most weeks in this range do schedule an easy run, so the
+    // check above is actually exercised, not skipped every time.
+    expect(weeksWithEasyRun).toBe(8) // 13,14,15,16,17,19,20,22 (18 and 21 have none)
   })
 })
