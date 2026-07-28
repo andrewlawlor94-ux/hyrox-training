@@ -10,6 +10,7 @@ import { addDays } from '@/domain/dates'
 import { DAYS_PER_WEEK, SLOT_DAY_OFFSET } from '@/domain/queue/constants'
 import { generateBaseWeeks } from '@/domain/planGeneration/baseWeeks'
 import { SEED_WEEKS_24, phaseForWeek } from '@/data/seed/plan24Week'
+import { buildBaseWeekPrescriptions } from '@/data/seed/baseWeeks'
 import { newId } from './ids'
 
 /** Base weeks don't carry a `WorkoutKind` of their own (they're plain
@@ -122,7 +123,7 @@ export async function materializePlan(args: MaterializeArgs): Promise<void> {
       sessions: week.templates.map((t) => ({
         sessionSlot: t.sessionSlot, sequenceInWeek: t.sequenceInWeek, name: t.name,
         kind: BASE_KIND_BY_SLOT[t.sessionSlot] ?? 'recovery', priority: t.priority, recoveryTags: t.recoveryTags,
-        estMinutes: t.estMinutes, prescriptions: [],
+        estMinutes: t.estMinutes, prescriptions: buildBaseWeekPrescriptions(t),
       })),
       existingPlanWeeks, phaseCache, skipSlots,
     })
