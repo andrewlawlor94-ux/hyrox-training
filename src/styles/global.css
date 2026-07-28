@@ -1,4 +1,4 @@
-@import './tokens.css';
+﻿@import './tokens.css';
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -60,19 +60,22 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .chip--elevated { background: var(--elevated-soft); color: var(--elevated); }
 
 /* ---------- ScaleSelector / SegmentedControl (shared radio-group pattern) ---------- */
-.scale-selector, .segmented-control { border: none; margin: 0; padding: 0; }
+/* `min-inline-size: 0` overrides the UA's `min-inline-size: min-content` on
+   fieldset, which otherwise refuses to shrink below its content and pushes the
+   whole page wider than the viewport — the 0-10 scale is 11 x 44px of targets,
+   so this is not a hypothetical. */
+.scale-selector, .segmented-control { border: none; margin: 0; padding: 0; min-inline-size: 0; max-width: 100%; }
 .scale-selector__legend, .segmented-control__legend { font-size: var(--font-size-sm); font-weight: 600; color: var(--text-muted); padding: 0; margin-bottom: var(--space-2); }
 
-/* Single row, scrolling horizontally within its own container (never the page) above
-   360px; wraps onto multiple lines only below 360px. */
-.scale-selector__row { display: flex; gap: var(--space-1); overflow-x: auto; padding-bottom: var(--space-1); }
-.scale-selector__label { flex: 0 0 auto; min-width: var(--tap-min); min-height: var(--tap-min); display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text); font-weight: 600; }
+/* Wraps at every width rather than scrolling. Eleven 44px targets need >=484px,
+   so a 0-10 scale cannot be one row on any phone (the widest iPhone is ~430px).
+   Wrapping keeps every value visible and tappable in one gesture; a scrolling
+   row would make the athlete swipe to find a value and then tap it, which is
+   worse one-handed mid-session and hides the ends of the scale. */
+.scale-selector__row { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.scale-selector__label { flex: 1 1 var(--tap-min); min-width: var(--tap-min); min-height: var(--tap-min); display: flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text); font-weight: 600; }
 .scale-selector__input:checked + .scale-selector__label { background: var(--accent); border-color: var(--accent); color: #fff; }
 .scale-selector__input:focus-visible + .scale-selector__label { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (max-width: 359px) {
-  .scale-selector__row { flex-wrap: wrap; overflow-x: visible; }
-  .scale-selector__label { flex: 1 1 auto; }
-}
 
 .segmented-control__row { display: flex; gap: var(--space-1); background: var(--surface-2); padding: var(--space-1); border-radius: var(--radius-control); }
 .segmented-control__option { display: flex; flex: 1; }
@@ -218,7 +221,7 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .onboarding-step__milestone dt { color: var(--text-muted); font-size: var(--font-size-sm); }
 .onboarding-step__milestone dd { margin: 0; font-weight: 600; }
 
-/* ---------- WorkoutScreen (§8: one scrolling screen, everything expanded) ---------- */
+/* ---------- WorkoutScreen (Â§8: one scrolling screen, everything expanded) ---------- */
 .workout-screen { display: flex; flex-direction: column; gap: var(--space-4); }
 .workout-screen__loading { padding: var(--space-5); color: var(--text-muted); }
 .workout-screen__header { display: flex; flex-direction: column; gap: var(--space-1); }
@@ -299,3 +302,5 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .db-error-screen__message { margin: 0; color: var(--text-muted); }
 .db-error-screen__actions { display: flex; gap: var(--space-3); justify-content: center; flex-wrap: wrap; }
 .db-error-screen__export-error { margin: 0; color: var(--elevated); font-size: var(--font-size-sm); }
+
+
