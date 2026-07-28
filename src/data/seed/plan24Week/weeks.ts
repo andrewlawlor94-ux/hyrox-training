@@ -1,18 +1,32 @@
 import type { Priority } from '@/data/types'
+import { MIN_EFFECTIVE_WEEK_SESSIONS } from '@/domain/queue/constants'
 import { PHASE_TYPICAL_PRIORITY, ZONE2_SLOT, phaseForWeek } from './phases'
 import { buildStrengthA, buildStrengthB } from './strengthTemplates'
 import { RUN_PROGRESSION, buildRaceWeekTechniqueTemplate, buildZone2Template } from './runProgression'
 import type { SeedTemplate, SeedWeek } from './types'
 
 const TOTAL_WEEKS = 24
-const MIN_EFFECTIVE_WEEK_SESSIONS = 4
 const DELOAD_WEEKS = new Set([4, 8])
-/** Reduced-to-minimum weeks (D5): every one of these carries only its
- * essential four sessions -- see `weeks.test.ts`/`priorities.test.ts`. */
+/**
+ * Reduced-to-minimum weeks (D5): every one of these carries only its
+ * essential four sessions -- see `weeks.test.ts`/`priorities.test.ts`.
+ *
+ * All four keep slot 1 (one strength-maintenance session), never slot 5 (a
+ * second strength day): weeks 18 and 21 are built around a full-format
+ * simulation, which itself supplies abundant station and strength stimulus,
+ * so a second dedicated strength day is the lowest-value session present --
+ * while slot 2 (easy run + the straight-knee calf raise, bent-knee calf
+ * raise, and tibialis raise) is the *highest*-value session, precisely
+ * because these are the two highest-running-impact weeks in the whole plan.
+ * Dropping Strength B and keeping the durability work is the correct trade
+ * in both weeks. (Controller-corrected: weeks 18/21 previously used
+ * `[1, 4, 5, 6]`, keeping both strength sessions and scheduling no
+ * durability work at all in the plan's two most demanding weeks.)
+ */
 const MIN_SESSION_WEEK_SLOTS: Record<number, readonly number[]> = {
   12: [1, 2, 4, 6],
-  18: [1, 4, 5, 6],
-  21: [1, 4, 5, 6],
+  18: [1, 2, 4, 6],
+  21: [1, 2, 4, 6],
   24: [1, 2, 4, 6],
 }
 /** Consolidation weeks: full slot set minus Zone 2 (five sessions). */
@@ -80,8 +94,12 @@ function buildTemplateForSlot(weekNumber: number, slot: number, sequenceInWeek: 
  * throws at build time instead of silently drifting apart. Skipped for
  * reduced-to-minimum weeks (<= 4 slots present), where D5 overrides the
  * phase's typical split entirely (every present session is essential).
+ *
+ * Exported (not just called internally) so `weeks.test.ts` can construct a
+ * deliberately inconsistent mapping and assert this throws -- a permanent
+ * regression test, not something proven only by an uncommitted manual break.
  */
-function assertMatchesTypicalEssentialSlots(weekNumber: number, weekSlots: readonly number[], templates: readonly SeedTemplate[], essentialSlots: readonly number[]): void {
+export function assertMatchesTypicalEssentialSlots(weekNumber: number, weekSlots: readonly number[], templates: readonly SeedTemplate[], essentialSlots: readonly number[]): void {
   if (weekSlots.length <= MIN_EFFECTIVE_WEEK_SESSIONS) return
   const actual = templates.filter((t) => t.priority === 'essential').map((t) => t.sessionSlot).sort((a, b) => a - b)
   const expected = essentialSlots.filter((slot) => weekSlots.includes(slot)).sort((a, b) => a - b)

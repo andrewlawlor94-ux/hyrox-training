@@ -1,8 +1,23 @@
 import { describe, expect, it, vi } from 'vitest'
 import { SEED_EXERCISES } from '@/data/seed/exercises'
 import { MIN_EFFECTIVE_WEEK_SESSIONS } from '@/domain/queue/constants'
-import { SEED_WEEKS_24 } from '../index'
+import { SEED_WEEKS_24, assertMatchesTypicalEssentialSlots } from '../index'
 import type { SeedTemplate, SeedWeek } from '../index'
+
+/** Minimal fixture builder for `assertMatchesTypicalEssentialSlots` unit
+ * tests below -- only `sessionSlot` and `priority` matter to that function. */
+function fakeTemplate(sessionSlot: number, priority: SeedTemplate['priority']): SeedTemplate {
+  return {
+    sessionSlot,
+    sequenceInWeek: sessionSlot,
+    name: `slot ${String(sessionSlot)}`,
+    kind: 'run',
+    priority,
+    recoveryTags: [],
+    estMinutes: 30,
+    prescriptions: [],
+  }
+}
 
 const VALID_EXERCISE_IDS = new Set<string>(SEED_EXERCISES.map((e): string => e.id))
 const weekByNumber = (n: number) => {
@@ -273,5 +288,42 @@ describe('SEED_WEEKS_24 structure', () => {
     const week1StrengthA = templateBySlot(1, 1).prescriptions
     const week2StrengthA = templateBySlot(2, 1).prescriptions
     expect(week1StrengthA).not.toBe(week2StrengthA)
+  })
+})
+
+describe('assertMatchesTypicalEssentialSlots (permanent regression, D7)', () => {
+  // A 6-slot week where the actual essential/important split is {1,2,4,6}
+  // essential, 5 important (matching Race-specific/Specific prep/Taper).
+  const weekSlots = [1, 2, 4, 5, 6]
+  const templates = [
+    fakeTemplate(1, 'essential'),
+    fakeTemplate(2, 'essential'),
+    fakeTemplate(4, 'essential'),
+    fakeTemplate(5, 'important'),
+    fakeTemplate(6, 'essential'),
+  ]
+
+  it('throws when essentialSlots disagrees with the templates actually built', () => {
+    // Deliberately inconsistent: claims slot 5 is essential and slot 2 is
+    // not, which is exactly the class of bug this task's coordinator audit
+    // found (essentialSlots/importantSlot drifting apart in the source
+    // data). This is a permanent regression test, not a manual break-and-
+    // revert: it constructs the inconsistency directly, so it can't be
+    // silently lost in a future refactor.
+    expect(() => assertMatchesTypicalEssentialSlots(1, weekSlots, templates, [1, 4, 5, 6])).toThrow(/do not match/)
+  })
+
+  it('does not throw when essentialSlots agrees with the templates actually built', () => {
+    expect(() => assertMatchesTypicalEssentialSlots(1, weekSlots, templates, [1, 2, 4, 6])).not.toThrow()
+  })
+
+  it('is a no-op for reduced-to-minimum weeks (<= MIN_EFFECTIVE_WEEK_SESSIONS slots), even when essentialSlots disagrees', () => {
+    const fourSlots = [1, 2, 4, 6]
+    const allEssential = fourSlots.map((slot) => fakeTemplate(slot, 'essential'))
+    expect(fourSlots.length).toBe(MIN_EFFECTIVE_WEEK_SESSIONS)
+    // essentialSlots here (from a different phase) disagrees with the
+    // actual set -- D5 overrides the phase's typical split for
+    // reduced-to-minimum weeks, so this must NOT throw.
+    expect(() => assertMatchesTypicalEssentialSlots(12, fourSlots, allEssential, [1, 4, 5, 6])).not.toThrow()
   })
 })

@@ -1,6 +1,6 @@
-import type { PaceSource, Priority } from '@/data/types'
+import type { IntervalSpec, PaceSource, Priority } from '@/data/types'
 import { lowerLegDurabilityPrescriptions, positiveRestSec } from '../stationCircuits'
-import type { SeedIntervalSpec, SeedPrescription, SeedTemplate } from '../types'
+import type { SeedPrescription, SeedTemplate } from '../types'
 
 /** Easy run (slot 2) always carries the lower-leg durability finisher (§19):
  * straight-knee calf raise, bent-knee calf raise, tibialis raise. This is the
@@ -75,7 +75,7 @@ export function buildIntervalQualityTemplate(
   priority: Priority,
   opts: IntervalQualityOptions,
 ): SeedTemplate {
-  const intervalSpec: SeedIntervalSpec = { reps, recoverySec, ...(opts.workSec !== undefined ? { workSec: opts.workSec } : {}), ...(opts.workDistanceM !== undefined ? { workDistanceM: opts.workDistanceM } : {}) }
+  const intervalSpec: IntervalSpec = { reps, recoverySec, ...(opts.workSec !== undefined ? { workSec: opts.workSec } : {}), ...(opts.workDistanceM !== undefined ? { workDistanceM: opts.workDistanceM } : {}) }
   const paceFields = opts.paceSource ? { paceSource: opts.paceSource } : {}
   const noteFields = opts.notes !== undefined ? { notes: opts.notes } : {}
   const prescriptions: SeedPrescription[] = [

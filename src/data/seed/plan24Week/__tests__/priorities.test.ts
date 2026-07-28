@@ -18,6 +18,14 @@ import { SEED_WEEKS_24 } from '../index'
  * protect a second strength day under compression. See `phases.ts`'s
  * `PHASE_TYPICAL_PRIORITY` doc comment for the full rationale.
  *
+ * A second, related bug was found in the same audit pass: weeks 18 and 21
+ * (both four-template weeks) previously used slot set `[1, 4, 5, 6]` --
+ * both strength sessions, and *no slot 2 at all* -- in the plan's two most
+ * demanding weeks (the 75% and 100% full-format simulations). Corrected to
+ * `[1, 2, 4, 6]` in `weeks.ts`'s `MIN_SESSION_WEEK_SLOTS`, so the durability
+ * work is present (and essential, since D5 makes every session in a
+ * four-template week essential) in every week 13-24.
+ *
  * Written by hand here, independently of `PHASE_TYPICAL_PRIORITY` in
  * `phases.ts`, so this test pins the intended design rather than checking
  * the implementation against itself.
@@ -40,10 +48,10 @@ const EXPECTED: Record<number, { essential: number[]; important?: number; option
   15: { essential: [1, 2, 4, 6], important: 5, optional: 3 },
   16: { essential: [1, 2, 4, 6], important: 5 },
   17: { essential: [1, 2, 4, 6], important: 5, optional: 3 },
-  18: { essential: [1, 4, 5, 6] },
+  18: { essential: [1, 2, 4, 6] },
   19: { essential: [1, 2, 4, 6], important: 5, optional: 3 },
   20: { essential: [1, 2, 4, 6], important: 5, optional: 3 },
-  21: { essential: [1, 4, 5, 6] },
+  21: { essential: [1, 2, 4, 6] },
   22: { essential: [1, 2, 4, 6], important: 5 },
   23: { essential: [1, 2, 4, 6], important: 5, optional: 3 },
   24: { essential: [1, 2, 4, 6] },
@@ -112,21 +120,32 @@ describe('priorities (D7)', () => {
     }
   })
 
-  it('in weeks 13-22, the easy-run-bearing template is essential whenever it is scheduled that week', () => {
-    // Controller-corrected regression guard: the easy run carries the three
-    // lower-leg durability exercises the plan's shin-durability strategy
-    // depends on, so it must never be downgraded to `important` (and so
-    // sacrificed under compression) in favour of a second strength session.
-    let weeksWithEasyRun = 0
-    for (let n = 13; n <= 22; n += 1) {
+  /**
+   * Controller-corrected regression guard, made explicitly not-blind-to-
+   * absence: the first version of this test used `.find(...)` and skipped
+   * silently when no easy-run template existed that week, which is exactly
+   * how weeks 18 and 21 slipped through review carrying two strength
+   * sessions and zero durability work in the plan's two most demanding
+   * weeks. `EXEMPT_WEEKS` below is the single place a future week could be
+   * deliberately excused from this rule -- it is currently empty, and stays
+   * asserted empty, so a week can only become exempt via an explicit,
+   * reviewed change to this list, never by quietly omitting slot 2.
+   */
+  const EXEMPT_WEEKS: readonly number[] = []
+
+  it('every week 13-24 schedules the easy run (durability session) as essential -- no silent exemptions', () => {
+    for (let n = 13; n <= 24; n += 1) {
+      if (EXEMPT_WEEKS.includes(n)) continue
       const week = weekByNumber(n)
-      const easyRunTemplate = week.templates.find((t) => t.prescriptions.some((p) => p.exerciseId === 'ex_easy_run'))
-      if (!easyRunTemplate) continue // weeks 18 and 21 don't schedule slot 2 at all that week
-      weeksWithEasyRun += 1
-      expect(easyRunTemplate.priority, `week ${String(n)} easy run should be essential`).toBe('essential')
+      const easyRunTemplate = week.templates.find((t) => t.sessionSlot === 2)
+      expect(easyRunTemplate, `week ${String(n)} must schedule slot 2 (easy run + durability) -- see EXEMPT_WEEKS if this is deliberate`).toBeDefined()
+      expect(easyRunTemplate?.prescriptions.some((p) => p.exerciseId === 'ex_easy_run'), `week ${String(n)} slot 2 must actually carry ex_easy_run`).toBe(true)
+      expect(easyRunTemplate?.priority, `week ${String(n)} easy run should be essential`).toBe('essential')
     }
-    // Non-vacuous: most weeks in this range do schedule an easy run, so the
-    // check above is actually exercised, not skipped every time.
-    expect(weeksWithEasyRun).toBe(8) // 13,14,15,16,17,19,20,22 (18 and 21 have none)
+    // No week 13-24 is currently exempt: every one of them keeps the
+    // durability session. If this ever needs to change, it must change here,
+    // deliberately, not by a slot-set edit silently making the loop above a
+    // no-op for that week.
+    expect(EXEMPT_WEEKS).toEqual([])
   })
 })

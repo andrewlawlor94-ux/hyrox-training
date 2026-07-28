@@ -1,18 +1,4 @@
-import type { LoadStyle, PaceSource, Priority, RecoveryTag, Unit, WorkoutKind } from '@/data/types'
-
-/**
- * Structure of an interval-based run prescription (e.g. 8x1km), mirroring
- * `IntervalSpec` in the entity model (Task 3) so a seed prescription can be
- * loaded straight into a real `Prescription` row without reshaping.
- */
-export interface SeedIntervalSpec {
-  warmupSec?: number
-  reps: number
-  workSec?: number
-  workDistanceM?: number
-  recoverySec: number
-  cooldownSec?: number
-}
+import type { IntervalSpec, LoadStyle, PaceSource, Priority, RecoveryTag, Unit, WorkoutKind } from '@/data/types'
 
 /**
  * A single exercise/run/station line within a `SeedTemplate`. Shaped to drop
@@ -38,7 +24,7 @@ export interface SeedPrescription {
   targetPaceSecPerKm?: number
   paceSource?: PaceSource
   restSec: number
-  intervalSpec?: SeedIntervalSpec
+  intervalSpec?: IntervalSpec
   notes?: string
 }
 

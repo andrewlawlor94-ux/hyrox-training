@@ -6,9 +6,9 @@
  * consumers outside `data/seed` are expected to need it directly.
  */
 export { SEED_PHASES, PHASE_TYPICAL_PRIORITY, ZONE2_SLOT, phaseForWeek } from './phases'
-export { SEED_WEEKS_24 } from './weeks'
+export { SEED_WEEKS_24, assertMatchesTypicalEssentialSlots } from './weeks'
 export { strengthVolumeFor, buildStrengthA, buildStrengthB } from './strengthTemplates'
 export type { StrengthVolume } from './strengthTemplates'
 export { RUN_PROGRESSION, zone2MinutesFor } from './runProgression'
 export type { WeekRunEntry } from './runProgression'
-export type { SeedIntervalSpec, SeedPhase, SeedPrescription, SeedTemplate, SeedWeek } from './types'
+export type { SeedPhase, SeedPrescription, SeedTemplate, SeedWeek } from './types'
