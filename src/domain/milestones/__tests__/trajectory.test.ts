@@ -101,6 +101,37 @@ describe('computeTrajectory', () => {
     expect(r.trajectory).toBe('needsAttention')
   })
 
+  it('rounds a fractional expected count up, not down (round-half-up at the .5 boundary)', () => {
+    // Every other trajectory fixture in this file lands on an exact integer
+    // expected-count (week 2 -> 1.0, week 14 -> 7.0), so none of them
+    // exercise Math.round's behaviour exactly at .5. Week 13 of 24 does:
+    // expectedByNow = round(12 * 13 / 24) = round(6.5).
+    //
+    // Deliberate choice: .5 rounds UP (more expected progress), not down.
+    // This status tells the athlete whether to push or back off, and it is
+    // safer to say "slightly behind" a beat early than "on track" a beat
+    // too long — especially given running volume is this plan's main risk
+    // for an athlete with a shin/sciatic history. `Math.round` already
+    // rounds .5 up towards +Infinity for positive inputs in JavaScript, so
+    // this confirms existing behaviour rather than changing it.
+    //
+    // This fixture achieves exactly 6 of 12 milestones (fourWorkoutWeeks,
+    // weeklyRunningDistance, longestContinuousRun, comfortable10k,
+    // standalone5k, and the default-achieved symptomsManageable). If
+    // expectedByNow rounded 6.5 down to 6, delta would be 0 -> onTrack.
+    // Rounding up to 7 gives delta -1 -> slightlyBehind, which is what this
+    // test asserts.
+    const f = facts({
+      currentWeek: 13,
+      weeksWithFourPlusSessions: 4,
+      weeklyRunKm: [{ weekNumber: 13, km: 28 }],
+      longestContinuousRunKm: 12,
+      best5kSeconds: 1700,
+    })
+    const r = computeTrajectory(resultsFor(f), f)
+    expect(r.trajectory).toBe('slightlyBehind')
+  })
+
   it('caps an otherwise-ahead result at slightlyBehind when symptoms are flagged, and names the cap in evidence', () => {
     const f = allAchievedFacts(2)
     f.symptomsFlagged = true

@@ -75,15 +75,23 @@ export const FOUR_WORKOUT_WEEKS_REQUIRED = 4
 
 /**
  * Sessions of race-load sled work required for "confidence". Not numbered by
- * the design brief; chosen as half of the six-effort compromised-km
- * threshold since sled confidence is a coarser, session-level milestone
- * rather than a fine pacing target.
+ * the design brief. The milestone is explicitly *confidence*, not mere
+ * capability: the plan deliberately prescribes race-load exposure without
+ * exhausting failure attempts, so a single session only proves the load can
+ * be moved once. Three separate sessions at race load is what makes it
+ * unremarkable on race day — fewer would let a single good day count as
+ * confidence.
  */
 export const RACE_LOAD_SLED_SESSIONS_REQUIRED = 3
 
 /**
- * Sessions of 100 wall balls (broken into manageable sets) required. Same
- * rationale and value as RACE_LOAD_SLED_SESSIONS_REQUIRED.
+ * Sessions of 100 wall balls (broken into manageable sets) required. Not
+ * numbered by the design brief. Same shape of reasoning as
+ * RACE_LOAD_SLED_SESSIONS_REQUIRED: the milestone is completing 100 in
+ * manageable sets, and three sessions distinguishes a repeatable capacity
+ * from one lucky effort. Wall balls are the station most likely to degrade
+ * under fatigue for a taller, heavier athlete, so a single completion is
+ * weak evidence.
  */
 export const HUNDRED_WALL_BALL_SESSIONS_REQUIRED = 3
 
