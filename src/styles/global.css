@@ -422,6 +422,9 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .chart-card h4 { font-size: var(--font-size-sm); text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-muted); margin: 0; }
 .chart-card__scroll { overflow-x: auto; max-width: 100%; }
 .chart-card__note { margin: 0; font-weight: 600; }
+/* Secondary to __note: this qualifies what the chart cannot show, rather than
+   stating a headline figure. */
+.chart-card__caveat { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
 
 .volume-legend { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 

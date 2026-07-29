@@ -170,6 +170,15 @@ describe('Progress: running — a week prescribed entirely by duration', () => {
     const note = document.querySelector('.chart-card__note')
     expect(note?.textContent).toMatch(/82 min planned/)
     expect(note?.textContent).not.toMatch(/0 km planned/)
+
+    // The note and table were honest, but the CHART plots plannedKm alone, so
+    // week 1 draws a zero Planned bar beside a real Completed one and reads as
+    // far ahead of plan. The bars cannot be corrected without inventing a pace,
+    // so the chart has to say which weeks its Planned bar understates.
+    const caveat = document.querySelector('.chart-card__caveat')
+    // Singular here: week 1 is the only week in the window at this point.
+    expect(caveat?.textContent).toMatch(/^Week 1 prescribes running by time, not distance/)
+    expect(caveat?.textContent).toMatch(/table below/)
   })
 })
 
