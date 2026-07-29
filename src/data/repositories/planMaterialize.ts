@@ -121,6 +121,74 @@ async function materializeWeek(args: {
   }
 }
 
+export interface PruneResult {
+  /** Instances kept because they carry history (frozen, or a logged child
+   * row) — keyed nowhere; callers only need the derived maps below. */
+  keepInstances: WorkoutInstance[]
+  /** Surviving `PlanWeek` rows keyed by their (still-final) week number, fed
+   * straight into `materializePlan`'s `existingPlanWeeks` so a re-materialize
+   * reuses rather than duplicates them. */
+  existingPlanWeeks: Map<number, PlanWeek>
+  /** `weekNumber:sessionSlot` pairs a re-materialize must not regenerate. */
+  skipSlots: Set<string>
+}
+
+/**
+ * Shared by `restoreSeedPlanPreservingHistory` and any other operation that
+ * needs to regenerate an active plan's future content while every
+ * history-bearing instance survives untouched: deletes every
+ * `WorkoutInstance` (and its `InstancePrescription`s) that carries no
+ * history, then deletes the now-orphaned `WorkoutTemplate`/`Prescription`/
+ * `PlanWeek`/`PlanPhase` rows those discarded instances belonged to. "History"
+ * is frozen OR has at least one child log row (set/run/station/symptom log),
+ * matching `restoreSeedPlanPreservingHistory`'s own doc comment — an
+ * in-progress instance with already-logged sets must never be discarded out
+ * from under its own logs.
+ *
+ * Does NOT call `materializePlan` itself — callers derive their own
+ * `baseWeeksCount`/`coreWeeksCount` (they differ: a full restore re-derives
+ * both from the active race goal, a duration change holds `baseWeeksCount`
+ * fixed and only changes `coreWeeksCount`) and pass this result's
+ * `existingPlanWeeks`/`skipSlots` straight through.
+ */
+export async function pruneHistorylessPlanData(planId: string): Promise<PruneResult> {
+  const allInstances = await db.workoutInstances.where('planId').equals(planId).toArray()
+  const keepInstances: WorkoutInstance[] = []
+  const discardIds: string[] = []
+  for (const inst of allInstances) {
+    const hasHistory = inst.frozen
+      || (await db.strengthSets.where('instanceId').equals(inst.id).count()) > 0
+      || (await db.runLogs.where('instanceId').equals(inst.id).count()) > 0
+      || (await db.stationLogs.where('instanceId').equals(inst.id).count()) > 0
+      || (await db.symptomLogs.where('instanceId').equals(inst.id).count()) > 0
+    if (hasHistory) keepInstances.push(inst)
+    else discardIds.push(inst.id)
+  }
+
+  await db.workoutInstances.bulkDelete(discardIds)
+  await db.instancePrescriptions.where('instanceId').anyOf(discardIds).delete()
+
+  const keptTemplateIds = new Set(keepInstances.map((i) => i.templateId))
+  const oldTemplates = await db.workoutTemplates.where('planId').equals(planId).toArray()
+  const templateIdsToDelete = oldTemplates.filter((t) => !keptTemplateIds.has(t.id)).map((t) => t.id)
+  await db.workoutTemplates.bulkDelete(templateIdsToDelete)
+  await db.prescriptions.where('templateId').anyOf(templateIdsToDelete).delete()
+
+  const keptPlanWeekIds = new Set(oldTemplates.filter((t) => keptTemplateIds.has(t.id)).map((t) => t.planWeekId))
+  const oldPlanWeeks = await db.planWeeks.where('planId').equals(planId).toArray()
+  const oldPhases = await db.planPhases.where('planId').equals(planId).toArray()
+
+  const existingPlanWeeks = new Map<number, PlanWeek>(oldPlanWeeks.filter((w) => keptPlanWeekIds.has(w.id)).map((w) => [w.weekNumber, w]))
+  await db.planWeeks.bulkDelete(oldPlanWeeks.filter((w) => !keptPlanWeekIds.has(w.id)).map((w) => w.id))
+
+  const keptPhaseIds = new Set([...existingPlanWeeks.values()].map((w) => w.phaseId))
+  await db.planPhases.bulkDelete(oldPhases.filter((p) => !keptPhaseIds.has(p.id)).map((p) => p.id))
+
+  const skipSlots = new Set(keepInstances.map((i) => `${String(i.weekNumber)}:${String(i.sessionSlot)}`))
+
+  return { keepInstances, existingPlanWeeks, skipSlots }
+}
+
 export async function materializePlan(args: MaterializeArgs): Promise<void> {
   const existingPlanWeeks = args.existingPlanWeeks ?? new Map<number, PlanWeek>()
   const skipSlots = args.skipSlots ?? new Set<string>()

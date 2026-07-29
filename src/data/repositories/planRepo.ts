@@ -1,12 +1,12 @@
 import { db } from '@/data/db'
-import type { EditScope, Exercise, ISODate, ISOInstant, Plan, PlanWeek, Prescription } from '@/data/types'
+import type { EditScope, Exercise, ISODate, ISOInstant, Plan, Prescription } from '@/data/types'
 import { anchorPlan } from '@/domain/planGeneration/anchor'
 import { DEFAULT_STRETCH_SECONDS, DEFAULT_TARGET_SECONDS } from '@/domain/milestones/constants'
 import { PLAN_WEEKS_DEFAULT } from '@/domain/planGeneration/constants'
 import { assertMutable } from './guard'
 import { getSettings, updateSettings } from './settingsRepo'
 import { syncQueue } from './scheduleRepo'
-import { materializePlan } from './planMaterialize'
+import { materializePlan, pruneHistorylessPlanData } from './planMaterialize'
 import { newId } from './ids'
 
 export async function listPlans(): Promise<Plan[]> {
@@ -145,31 +145,7 @@ export async function restoreSeedPlanPreservingHistory(args: { today: ISODate; n
     const activePlan = await db.plans.get(settings.activePlanId)
     if (!activePlan) throw new Error('No active plan to restore')
 
-    const allInstances = await db.workoutInstances.where('planId').equals(activePlan.id).toArray()
-    const keepInstances: typeof allInstances = []
-    const discardIds: string[] = []
-    for (const inst of allInstances) {
-      const hasHistory = inst.frozen
-        || (await db.strengthSets.where('instanceId').equals(inst.id).count()) > 0
-        || (await db.runLogs.where('instanceId').equals(inst.id).count()) > 0
-        || (await db.stationLogs.where('instanceId').equals(inst.id).count()) > 0
-        || (await db.symptomLogs.where('instanceId').equals(inst.id).count()) > 0
-      if (hasHistory) keepInstances.push(inst)
-      else discardIds.push(inst.id)
-    }
-
-    await db.workoutInstances.bulkDelete(discardIds)
-    await db.instancePrescriptions.where('instanceId').anyOf(discardIds).delete()
-
-    const keptTemplateIds = new Set(keepInstances.map((i) => i.templateId))
-    const oldTemplates = await db.workoutTemplates.where('planId').equals(activePlan.id).toArray()
-    const templateIdsToDelete = oldTemplates.filter((t) => !keptTemplateIds.has(t.id)).map((t) => t.id)
-    await db.workoutTemplates.bulkDelete(templateIdsToDelete)
-    await db.prescriptions.where('templateId').anyOf(templateIdsToDelete).delete()
-
-    const keptPlanWeekIds = new Set(oldTemplates.filter((t) => keptTemplateIds.has(t.id)).map((t) => t.planWeekId))
-    const oldPlanWeeks = await db.planWeeks.where('planId').equals(activePlan.id).toArray()
-    const oldPhases = await db.planPhases.where('planId').equals(activePlan.id).toArray()
+    const { existingPlanWeeks, skipSlots } = await pruneHistorylessPlanData(activePlan.id)
 
     // Re-derive the base/core split from the active race goal, which is the
     // authoritative statement of how long this plan should be. The previous
@@ -185,14 +161,6 @@ export async function restoreSeedPlanPreservingHistory(args: { today: ISODate; n
     const anchor = goal ? anchorPlan({ today: activePlan.startDate, raceDate: goal.raceDate }) : undefined
     const baseWeeksCount = anchor?.baseWeeks ?? 0
     const coreWeeksCount = anchor?.coreWeeks ?? PLAN_WEEKS_DEFAULT
-
-    const existingPlanWeeks = new Map<number, PlanWeek>(oldPlanWeeks.filter((w) => keptPlanWeekIds.has(w.id)).map((w) => [w.weekNumber, w]))
-    await db.planWeeks.bulkDelete(oldPlanWeeks.filter((w) => !keptPlanWeekIds.has(w.id)).map((w) => w.id))
-
-    const keptPhaseIds = new Set([...existingPlanWeeks.values()].map((w) => w.phaseId))
-    await db.planPhases.bulkDelete(oldPhases.filter((p) => !keptPhaseIds.has(p.id)).map((p) => p.id))
-
-    const skipSlots = new Set(keepInstances.map((i) => `${String(i.weekNumber)}:${String(i.sessionSlot)}`))
 
     await materializePlan({
       planId: activePlan.id, planStartDate: activePlan.startDate,
