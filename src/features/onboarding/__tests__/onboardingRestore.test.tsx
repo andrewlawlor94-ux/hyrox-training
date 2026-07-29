@@ -53,6 +53,12 @@ describe('onboarding: restore from a backup before onboarding is complete', () =
     const input = screen.getByLabelText(/restore backup/i)
     fireEvent.change(input, { target: { files: [file] } })
 
+    // C1: a valid file is staged behind a confirmation (current-vs-file
+    // counts) rather than imported immediately — nothing is written until
+    // this tap.
+    await screen.findByRole('heading', { name: /replace all data on this device/i })
+    fireEvent.click(screen.getByRole('button', { name: /import and replace/i }))
+
     // Restoring installs a whole plan's worth of instances/prescriptions —
     // give it the same generous timeout the "finish onboarding" test uses.
     await screen.findByRole('heading', { name: /home/i }, { timeout: 5000 })

@@ -554,7 +554,7 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .exercise-list-editor__row-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
 
 .exercise-picker, .substitute-search-sheet, .prescription-editor, .edit-scope-sheet,
-.conflict-warning-sheet, .move-workout-control, .past-record-editor, .plan-manager {
+.conflict-warning-sheet, .move-workout-control, .past-record-editor, .plan-manager, .import-confirm-sheet {
   display: flex; flex-direction: column; gap: var(--space-3); min-width: 0;
 }
 .exercise-picker input, .substitute-search-sheet input, .prescription-editor textarea, .plan-manager input {
@@ -565,7 +565,9 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
   list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2);
 }
 .prescription-editor__notes { display: flex; flex-direction: column; gap: var(--space-1); }
-.edit-scope-sheet__actions, .conflict-warning-sheet__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.edit-scope-sheet__actions, .conflict-warning-sheet__actions, .import-confirm-sheet__actions {
+  display: flex; flex-wrap: wrap; gap: var(--space-2);
+}
 
 .move-workout-control { flex-direction: row; flex-wrap: wrap; align-items: center; }
 .move-workout-control__label { font-weight: 600; }

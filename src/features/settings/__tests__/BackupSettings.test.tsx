@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { db, resetDatabase } from '@/data/db'
 import { updateSettings } from '@/data/repositories'
+import { BACKUP_TABLES } from '@/domain/backup/constants'
 import { renderApp } from '@/test/renderApp'
 import { seedTestDb } from '@/test/seedTestDb'
 
@@ -19,6 +20,10 @@ async function onboard(): Promise<void> {
 async function renderSettings(): Promise<void> {
   renderApp({ route: '/settings' })
   await screen.findByRole('heading', { level: 1, name: /settings/i })
+  // SafetySnapshotPanel resolves its snapshot lookup asynchronously on
+  // mount; waiting for it here (rather than in every test) keeps that
+  // resolution inside `act` instead of leaking a warning into later tests.
+  await screen.findByRole('heading', { name: /pre-import snapshot/i })
 }
 
 beforeEach(async () => {
@@ -104,21 +109,47 @@ describe('Backup & restore: export', () => {
 })
 
 describe('Backup & restore: import', () => {
-  it('reports counts on a successful import', async () => {
+  it('stages a valid file behind a confirmation showing current-vs-file counts, and writes nothing until confirmed', async () => {
     await seedTestDb({ withHistory: true })
     await onboard()
     const { exportBackup } = await import('@/data/backup/exportBackup')
     const { json } = await exportBackup(NOW, '1.0.0')
     await renderSettings()
 
+    const before = await db.workoutInstances.count()
     const file = new File([json], 'backup.json', { type: 'application/json' })
     const input = screen.getByLabelText(/import backup/i)
     fireEvent.change(input, { target: { files: [file] } })
 
+    expect(await screen.findByRole('heading', { name: /replace all data on this device/i })).toBeInTheDocument()
+    // Nothing has been written yet — only a real confirm-tap triggers importBackup.
+    expect(await db.workoutInstances.count()).toBe(before)
+
+    fireEvent.click(screen.getByRole('button', { name: /import and replace/i }))
+
     expect(await screen.findByText(/imported/i)).toBeInTheDocument()
   })
 
-  it('shows the specific validation message on a corrupted file, and leaves data untouched', async () => {
+  it('cancelling the confirmation writes nothing', async () => {
+    await seedTestDb({ withHistory: true })
+    await onboard()
+    const { exportBackup } = await import('@/data/backup/exportBackup')
+    const { json } = await exportBackup(NOW, '1.0.0')
+    await renderSettings()
+
+    const before = await db.workoutInstances.count()
+    const file = new File([json], 'backup.json', { type: 'application/json' })
+    const input = screen.getByLabelText(/import backup/i)
+    fireEvent.change(input, { target: { files: [file] } })
+    await screen.findByRole('heading', { name: /replace all data on this device/i })
+
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
+
+    expect(screen.queryByRole('heading', { name: /replace all data on this device/i })).not.toBeInTheDocument()
+    expect(await db.workoutInstances.count()).toBe(before)
+  })
+
+  it('shows the specific validation message on a corrupted file, with no confirmation step, and leaves data untouched', async () => {
     await seedTestDb({ withHistory: true })
     await onboard()
     await renderSettings()
@@ -129,7 +160,113 @@ describe('Backup & restore: import', () => {
     fireEvent.change(input, { target: { files: [file] } })
 
     expect(await screen.findByText(/not valid json/i)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /replace all data on this device/i })).not.toBeInTheDocument()
     expect(await db.workoutInstances.count()).toBe(before)
+  })
+
+  it('requires typing REPLACE before an all-empty file can be imported over real data, and refuses it until typed', async () => {
+    await seedTestDb({ withHistory: true })
+    await onboard()
+    await renderSettings()
+
+    const before = await db.workoutInstances.count()
+    expect(before).toBeGreaterThan(0)
+
+    const emptyBackup = {
+      format: 'hyrox-training-backup',
+      schemaVersion: 1,
+      appVersion: '1.0.0',
+      exportedAt: NOW,
+      counts: Object.fromEntries(BACKUP_TABLES.map((table) => [table, 0])),
+      data: Object.fromEntries(BACKUP_TABLES.map((table) => [table, []])),
+    }
+    const file = new File([JSON.stringify(emptyBackup)], 'empty.json', { type: 'application/json' })
+    const input = screen.getByLabelText(/import backup/i)
+    fireEvent.change(input, { target: { files: [file] } })
+
+    await screen.findByRole('heading', { name: /replace all data on this device/i })
+    const confirmButton = screen.getByRole('button', { name: /import and replace/i })
+    expect(confirmButton).toBeDisabled()
+
+    fireEvent.click(confirmButton)
+    expect(await db.workoutInstances.count()).toBe(before)
+
+    fireEvent.change(screen.getByLabelText(/type replace to confirm/i), { target: { value: 'REPLACE' } })
+    expect(confirmButton).toBeEnabled()
+
+    fireEvent.click(confirmButton)
+
+    await waitFor(async () => {
+      expect(await db.workoutInstances.count()).toBe(0)
+    })
+  })
+})
+
+describe('Backup & restore: pre-import snapshot (C3)', () => {
+  it('reports no snapshot yet before any import has ever happened', async () => {
+    await seedTestDb({ withHistory: true })
+    await onboard()
+    await renderSettings()
+
+    expect(screen.getByText(/no snapshot yet/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /restore snapshot/i })).not.toBeInTheDocument()
+  })
+
+  it('becomes reachable (exportable and restorable) once an import has written one', async () => {
+    await seedTestDb({ withHistory: true })
+    await onboard()
+    const { exportBackup } = await import('@/data/backup/exportBackup')
+    const { json } = await exportBackup(NOW, '1.0.0')
+    await renderSettings()
+
+    const file = new File([json], 'backup.json', { type: 'application/json' })
+    fireEvent.change(screen.getByLabelText(/import backup/i), { target: { files: [file] } })
+    await screen.findByRole('heading', { name: /replace all data on this device/i })
+    fireEvent.click(screen.getByRole('button', { name: /import and replace/i }))
+    await screen.findByText(/imported/i)
+
+    // The snapshot is now a normal Settings item — visible without DevTools.
+    expect(await screen.findByRole('button', { name: /export snapshot/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /restore snapshot/i })).toBeInTheDocument()
+    expect(screen.queryByText(/no snapshot yet/i)).not.toBeInTheDocument()
+  })
+
+  it('"Restore snapshot" recovers the pre-import state through the same staged confirmation as any other import', async () => {
+    await seedTestDb({ withHistory: true })
+    await onboard()
+    const originalWorkoutInstanceCount = await db.workoutInstances.count()
+
+    const { exportBackup } = await import('@/data/backup/exportBackup')
+    const { json: replacementJson } = await exportBackup(NOW, '1.0.0')
+    const replacementBackup = JSON.parse(replacementJson) as { data: Record<string, unknown[]> }
+    // A second, much smaller file — just the settings table's own row is
+    // enough to be a structurally valid backup with far fewer records.
+    const smallerBackup = {
+      ...replacementBackup,
+      counts: Object.fromEntries(BACKUP_TABLES.map((table) => [table, table === 'settings' ? 1 : 0])),
+      data: Object.fromEntries(
+        BACKUP_TABLES.map((table) => [table, table === 'settings' ? replacementBackup.data.settings : []]),
+      ),
+    }
+
+    await renderSettings()
+    const smallerFile = new File([JSON.stringify(smallerBackup)], 'smaller.json', { type: 'application/json' })
+    fireEvent.change(screen.getByLabelText(/import backup/i), { target: { files: [smallerFile] } })
+    await screen.findByRole('heading', { name: /replace all data on this device/i })
+    // Drastically smaller than what's on the device — the hard-confirm gate applies.
+    fireEvent.change(screen.getByLabelText(/type replace to confirm/i), { target: { value: 'REPLACE' } })
+    fireEvent.click(screen.getByRole('button', { name: /import and replace/i }))
+    await waitFor(async () => { expect(await db.workoutInstances.count()).toBe(0) })
+
+    // The snapshot now holds the pre-shrink state — restoring it should
+    // bring the original workout instances back.
+    fireEvent.click(await screen.findByRole('button', { name: /restore snapshot/i }))
+    await screen.findByRole('heading', { name: /replace all data on this device/i })
+    fireEvent.click(screen.getByRole('button', { name: /import and replace/i }))
+
+    await waitFor(async () => {
+      expect(await db.workoutInstances.count()).toBe(originalWorkoutInstanceCount)
+    })
   })
 })
 

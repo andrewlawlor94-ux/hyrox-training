@@ -7,9 +7,12 @@ import type { ValidationFailure } from '@/domain/backup/validate'
 import { exportBackup } from './exportBackup'
 
 /** Tag written into the pre-import safety snapshot's own `appVersion` field
- * — this JSON blob is never re-imported through `validateBackup`, it exists
- * only so `db.safetyBackups.get('pre-import').json` can be inspected or
- * manually recovered later, so the tag just needs to say what it is. */
+ * so a snapshot's JSON is recognizable at a glance (in DevTools, or in an
+ * exported file) as "the last state before an import", distinct from a
+ * normal export's real app version. `SafetySnapshotPanel` (C3) does feed this
+ * same JSON back through `validateBackup`/`importBackup` when the athlete
+ * taps "Restore snapshot" — it is a completely ordinary backup file in every
+ * way that matters to validation, just tagged for provenance. */
 const SAFETY_SNAPSHOT_TAG = 'pre-import-snapshot'
 
 export type ImportResult =

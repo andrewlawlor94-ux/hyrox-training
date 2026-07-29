@@ -85,6 +85,16 @@ test('a captured backup restores a completed session exactly, and a corrupted fi
     mimeType: 'application/json',
     buffer: Buffer.from(exportedJson, 'utf-8'),
   })
+
+  // C1: a valid file is staged behind a confirmation showing current-vs-file
+  // record counts rather than imported the instant it's selected — nothing
+  // is written to the (currently empty, freshly reset) device until this
+  // real tap confirms the replacement.
+  await expect(page.getByRole('heading', { name: 'Replace all data on this device?' })).toBeVisible()
+  const emptySetsBeforeConfirm = await readStore<StrengthSetRow>(page, 'strengthSets')
+  expect(emptySetsBeforeConfirm).toHaveLength(0)
+  await page.getByRole('button', { name: 'Import and replace' }).click()
+
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible({ timeout: 20_000 })
 
   const restoredSet = await findBackSquatSet(page)

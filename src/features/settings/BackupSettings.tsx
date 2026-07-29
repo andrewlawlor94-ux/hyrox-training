@@ -6,6 +6,8 @@ import { restoreSeedPlanPreservingHistory, updateSettings } from '@/data/reposit
 import type { AppSettings } from '@/data/types'
 import { exportBackup } from '@/data/backup/exportBackup'
 import { ImportBackupButton } from '@/features/backup/ImportBackupButton'
+import { ImportConfirmSheet } from '@/features/backup/ImportConfirmSheet'
+import { SafetySnapshotPanel } from '@/features/backup/SafetySnapshotPanel'
 import { useImportBackup } from '@/features/backup/useImportBackup'
 import { useToday } from '@/hooks/useToday'
 
@@ -60,7 +62,7 @@ interface BackupSettingsProps {
 export const BackupSettings: FC<BackupSettingsProps> = ({ settings }) => {
   const today = useToday()
   const [storageStatus, setStorageStatus] = useState<StorageStatus>('checking')
-  const { message: importMessage, handleFileChange } = useImportBackup()
+  const { message: importMessage, pending, handleFileChange, confirmImport, cancelImport } = useImportBackup()
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null)
   const [confirmText, setConfirmText] = useState('')
 
@@ -116,6 +118,9 @@ export const BackupSettings: FC<BackupSettingsProps> = ({ settings }) => {
         <ImportBackupButton triggerLabel="Import backup" ariaLabel="Import backup" onFileChange={handleFileChange} />
       </div>
       {importMessage && <p role="status" className="settings-screen__note">{importMessage}</p>}
+      <ImportConfirmSheet pending={pending} onConfirm={confirmImport} onCancel={cancelImport} />
+
+      <SafetySnapshotPanel />
 
       <div className="settings-screen__actions">
         <Button variant="secondary" onClick={() => { void handleRestorePlan() }}>

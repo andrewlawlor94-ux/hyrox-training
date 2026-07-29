@@ -2,6 +2,7 @@ import type { FC } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { readSettings } from '@/data/repositories'
 import { ImportBackupButton } from '@/features/backup/ImportBackupButton'
+import { ImportConfirmSheet } from '@/features/backup/ImportConfirmSheet'
 import { useImportBackup } from '@/features/backup/useImportBackup'
 import { useToday } from '@/hooks/useToday'
 import { useOnboarding } from './useOnboarding'
@@ -40,9 +41,10 @@ export const OnboardingScreen: FC = () => {
     if (settings.onboardingCompletedAt) void navigate('/')
   }
 
-  const { message: restoreMessage, handleFileChange: handleRestoreFileChange } = useImportBackup(
-    () => { void handleRestoredSuccessfully() },
-  )
+  const {
+    message: restoreMessage, pending: restorePending, handleFileChange: handleRestoreFileChange,
+    confirmImport: confirmRestore, cancelImport: cancelRestore,
+  } = useImportBackup(() => { void handleRestoredSuccessfully() })
 
   if (onboarding.step === 'raceDate') {
     return (
@@ -65,6 +67,7 @@ export const OnboardingScreen: FC = () => {
           </p>
           {restoreMessage ? <p role="status" className="onboarding-step__note">{restoreMessage}</p> : null}
         </div>
+        <ImportConfirmSheet pending={restorePending} onConfirm={confirmRestore} onCancel={cancelRestore} />
       </>
     )
   }
