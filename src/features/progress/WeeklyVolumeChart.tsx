@@ -2,7 +2,7 @@ import type { FC } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Chip } from '@/components'
 import type { ChipTone } from '@/components'
-import { formatDistanceM } from '@/domain/units/format'
+import { formatDistanceM, SEC_PER_MIN } from '@/domain/units/format'
 import { ChartTable } from './ChartTable'
 import type { WeeklyVolumeRow } from './runningViewModel'
 import { AXIS_TICK_FONT_SIZE, CHART_HEIGHT, CHART_MARGIN, Y_AXIS_WIDTH } from './constants'
@@ -36,6 +36,24 @@ function formatKm(km: number): string {
 }
 
 /**
+ * A week's planned volume, honestly: many seeded runs are prescribed by
+ * duration rather than distance (an easy run's "30 min", not "5 km"), so
+ * `plannedKm` alone can read as a genuine zero for a week that in fact asked
+ * for real training time. Rather than inventing a pace to convert minutes
+ * into km (which would fabricate data no different from recording an effort
+ * rating the athlete never gave), both units are shown, each only when
+ * non-zero — "82 min", "8 km", or "75 min + 8 km" for a mixed week — so an
+ * athlete can never read a duration-prescribed week as "ahead of plan"
+ * purely because its minutes were counted as zero km.
+ */
+function formatPlannedVolume(row: WeeklyVolumeRow): string {
+  const parts: string[] = []
+  if (row.plannedDurationSec > 0) parts.push(`${String(Math.round(row.plannedDurationSec / SEC_PER_MIN))} min`)
+  if (row.plannedKm > 0) parts.push(formatKm(row.plannedKm))
+  return parts.length > 0 ? parts.join(' + ') : formatKm(0)
+}
+
+/**
  * Weekly running volume (§17): planned, completed, missed, and dropped
  * distance as four independent bars per week — never one stacked
  * percentage. The most recent week's completed-vs-planned values are also
@@ -50,7 +68,7 @@ export const WeeklyVolumeChart: FC<WeeklyVolumeChartProps> = ({ rows }) => {
       <h3>Weekly running volume</h3>
       {latest && (
         <p className="chart-card__note">
-          This week: {formatKm(latest.completedKm)} completed of {formatKm(latest.plannedKm)} planned.
+          This week: {formatKm(latest.completedKm)} completed of {formatPlannedVolume(latest)} planned.
         </p>
       )}
       <div className="volume-legend">
@@ -74,7 +92,7 @@ export const WeeklyVolumeChart: FC<WeeklyVolumeChartProps> = ({ rows }) => {
         rows={rows}
         columns={[
           { key: 'week', label: 'Week', render: (row) => String(row.weekNumber) },
-          { key: 'planned', label: 'Planned', render: (row) => formatKm(row.plannedKm) },
+          { key: 'planned', label: 'Planned', render: (row) => formatPlannedVolume(row) },
           { key: 'completed', label: 'Completed', render: (row) => formatKm(row.completedKm) },
           { key: 'missed', label: 'Missed', render: (row) => formatKm(row.missedKm) },
           { key: 'dropped', label: 'Dropped', render: (row) => formatKm(row.droppedKm) },

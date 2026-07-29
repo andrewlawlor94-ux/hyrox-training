@@ -32,6 +32,10 @@ const RUNNING_MILESTONE_KEYS: readonly MilestoneKey[] = [
 export interface WeeklyVolumeRow {
   weekNumber: number
   plannedKm: number
+  /** Prescribed running time (seconds) from duration-prescribed sessions --
+   * see `prescribedRunDurationSec`. Kept separate from `plannedKm` rather
+   * than converted into it, which would require fabricating a pace. */
+  plannedDurationSec: number
   completedKm: number
   missedKm: number
   droppedKm: number
@@ -68,23 +72,28 @@ export interface RunningProgressVM {
  * A run prescription's prescribed distance, in metres — plain `distanceM`
  * for a steady run, or `reps * workDistanceM` for an interval prescription
  * (same fields `homeViewModel.structureLineFor` already reads for the same
- * purpose). Zero for a prescription that specifies neither.
- *
- * This genuinely under-counts: several seeded run templates (easy run, plain
- * long run, and early-week quality-run intervals) prescribe a `durationSec`
- * target instead of a distance one, and there is no honest way to turn "20
- * minutes easy" into a km figure without inventing a pace assumption this
- * screen has no business making. Reporting 0 for those is deliberate — it
- * is what the app actually knows the prescribed distance to be, not a
- * fabricated estimate — at the cost of `plannedKm` reading low in weeks
- * dominated by duration-based sessions. `completedKm` has no such gap: an
- * athlete's `RunLog.distanceKm` is always a real logged distance regardless
- * of how the session was prescribed.
+ * purpose). Zero for a prescription that specifies neither (a
+ * duration-prescribed session -- see `prescribedRunDurationSec`, which
+ * covers that case instead of this one fabricating a pace to fill it).
  */
 function prescribedRunDistanceM(prescription: InstancePrescription): number {
   if (prescription.distanceM !== undefined) return prescription.distanceM
   if (prescription.intervalSpec?.workDistanceM !== undefined) {
     return prescription.intervalSpec.reps * prescription.intervalSpec.workDistanceM
+  }
+  return 0
+}
+
+/**
+ * The duration counterpart of `prescribedRunDistanceM`, in seconds: plain
+ * `durationSec`, or `reps * workSec` for a time-based interval. Zero for a
+ * prescription that specifies neither, i.e. one already counted by
+ * `prescribedRunDistanceM` instead.
+ */
+function prescribedRunDurationSec(prescription: InstancePrescription): number {
+  if (prescription.durationSec !== undefined) return prescription.durationSec
+  if (prescription.intervalSpec?.workSec !== undefined) {
+    return prescription.intervalSpec.reps * prescription.intervalSpec.workSec
   }
   return 0
 }
@@ -112,6 +121,9 @@ function weekWindow(currentWeek: number): number[] {
  * sessions the athlete skipped or the queue engine auto-dropped. A week
  * with no run prescriptions at all still gets a zero-filled row (seeded by
  * `weekWindow` up front), so it is never silently omitted from the chart.
+ * `plannedDurationSec` rides alongside `plannedKm` so a week prescribed
+ * entirely by duration (e.g. "easy run 30 min") never reads as a genuine
+ * zero planned distance -- see `WeeklyVolumeRow`'s own doc comment.
  */
 export function buildWeeklyVolume(
   instances: readonly WorkoutInstance[],
@@ -122,7 +134,7 @@ export function buildWeeklyVolume(
 ): WeeklyVolumeRow[] {
   const rows = new Map<number, WeeklyVolumeRow>()
   for (const week of weekWindow(currentWeek)) {
-    rows.set(week, { weekNumber: week, plannedKm: 0, completedKm: 0, missedKm: 0, droppedKm: 0 })
+    rows.set(week, { weekNumber: week, plannedKm: 0, plannedDurationSec: 0, completedKm: 0, missedKm: 0, droppedKm: 0 })
   }
 
   const runLogsByInstanceId = new Map<string, RunLog[]>()
@@ -142,6 +154,7 @@ export function buildWeeklyVolume(
 
     const prescribedKm = runPrescriptions.reduce((sum, p) => sum + prescribedRunDistanceM(p), 0) / M_PER_KM
     row.plannedKm += prescribedKm
+    row.plannedDurationSec += runPrescriptions.reduce((sum, p) => sum + prescribedRunDurationSec(p), 0)
 
     if (COMPLETED_STATUSES.includes(instance.status)) {
       const logs = runLogsByInstanceId.get(instance.id) ?? []

@@ -143,6 +143,36 @@ describe('Progress: running — a week with no runs', () => {
   })
 })
 
+describe('Progress: running — a week prescribed entirely by duration', () => {
+  it('shows a non-zero planned figure (in minutes) instead of pretending the plan asked for 0 km', async () => {
+    await seedTestDb() // no history -- real seeded week 1: easy run, quality intervals,
+    // and the long run are ALL duration-prescribed (30 min / 6x2min / 40 min),
+    // never a distanceM. Before this fix, `plannedKm` alone made week 1 read as
+    // "0 km planned", which an athlete logging 0 km completed could misread as
+    // having already matched the plan.
+    await onboard()
+    await renderRunningProgress()
+
+    const table = document.querySelectorAll('.chart-table')[0]
+    if (!table) throw new Error('expected a chart-table for weekly volume')
+    const rows = within(table as HTMLElement).getAllByRole('row')
+    const week1Row = rows.find((row) => within(row).queryByText('1') !== null)
+    if (!week1Row) throw new Error('expected a week-1 row')
+    const cells = within(week1Row).getAllByRole('cell').map((cell) => cell.textContent ?? '')
+    const [, plannedCell] = cells
+
+    // Week 1's real prescribed running time: easy run 30 min + long run 40
+    // min + quality run 6x2min = 82 min, 0 km.
+    expect(plannedCell).toBe('82 min')
+    expect(plannedCell).not.toBe('0 km')
+    expect(plannedCell).not.toBe('0 m')
+
+    const note = document.querySelector('.chart-card__note')
+    expect(note?.textContent).toMatch(/82 min planned/)
+    expect(note?.textContent).not.toMatch(/0 km planned/)
+  })
+})
+
 describe('Progress: running — pace, benchmark, durability, milestones, trajectory', () => {
   it('renders run distance over time, pace by type, easy-run trend, benchmark history, longest run, and trajectory evidence', async () => {
     await seedTestDb({ withHistory: true })
