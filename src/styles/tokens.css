@@ -4,7 +4,13 @@
   --surface-2: #f0f2f5;
   --border: #e4e7ec;
   --text: #111827;
-  --text-muted: #667085;
+  /* Darkened from #667085, which measured 4.44:1 against --surface-2 — under
+     WCAG AA's 4.5:1 for body text, and used for real secondary copy (an
+     unselected .segmented-control__label sits on exactly that background).
+     #5f687c is 4.98:1 there and 5.59:1 on --bg, so it clears AA on every
+     surface in the palette with margin rather than by a rounding hair, while
+     staying an obviously secondary blue-grey next to --text. */
+  --text-muted: #5f687c;
   --accent: #2563eb;
   --accent-soft: #eff5ff;
   --green: #15803d;
