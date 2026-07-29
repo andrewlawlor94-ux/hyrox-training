@@ -123,14 +123,79 @@ export function exerciseCard(page: Page, exerciseName: string): Locator {
   return page.locator('article').filter({ has: page.getByRole('heading', { name: exerciseName, exact: true }) })
 }
 
+/** One element that is wider than the space it has, named well enough to fix. */
+export interface OverflowOffender {
+  selector: string
+  /** `'viewport'` — the element's box extends past the right edge of the
+   * viewport. `'clipped'` — the element's own content is wider than its box and
+   * it declares no horizontal scroller, so that content is silently cut off. */
+  kind: 'viewport' | 'clipped'
+  width: number
+  limit: number
+}
+
 /**
- * A real layout-width check (`scrollWidth` vs `clientWidth`), not a CSS-rule
- * inspection — this is the same measurement that would have caught the
- * eleven 44px tap targets that forced real horizontal scroll, regardless of
- * which rule or element caused it. The `+ 1` absorbs sub-pixel rounding.
+ * Finds elements that actually overflow horizontally, and names them.
+ *
+ * The obvious check — `documentElement.scrollWidth > clientWidth` — CANNOT FAIL
+ * in this app and so proved nothing: `body { overflow-x: hidden }` clamps the
+ * document's scroll width to the viewport, and `.app-shell__main` (not the
+ * document) is the real scroll container. Overflow here does not produce a
+ * scrollbar to detect; it produces content the athlete can never reach. So
+ * measure the elements themselves:
+ *
+ * - `viewport`: the element's box extends past the viewport's right edge.
+ * - `clipped`: the element's content is wider than its box while its computed
+ *   `overflow-x` is neither `auto` nor `scroll` — i.e. nothing is scrollable
+ *   and the excess is simply gone. Deliberate scrollers (a wide chart or
+ *   table in an `overflow-x: auto` wrapper) are exempt by that same test.
+ *
+ * Three exemptions from `clipped`, each because overflow there is not a layout
+ * defect (all verified against this app, not assumed):
+ * - form controls (`input`/`textarea`/`select`), whose text content scrolls
+ *   natively whenever the typed value is longer than the field;
+ * - boxes under 2px wide, which cannot display anything either way — this is
+ *   what the `.visually-hidden` screen-reader pattern (`width: 1px` + `clip`)
+ *   deliberately looks like;
+ * - `text-overflow: ellipsis`, which is an explicit decision to truncate.
+ *
+ * The `+ 1` slack absorbs sub-pixel rounding, and zero-area / `display: none`
+ * / `visibility: hidden` elements are skipped since they render nothing.
  */
-export async function hasHorizontalScroll(page: Page): Promise<boolean> {
-  return page.evaluate(
-    () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
-  )
+export async function horizontalOverflow(page: Page): Promise<OverflowOffender[]> {
+  return page.evaluate(() => {
+    const SLACK_PX = 1
+    /** Below this width a box shows nothing, so "its content is wider" is
+     * meaningless — see the `.visually-hidden` exemption. */
+    const MIN_MEANINGFUL_WIDTH_PX = 2
+    const NATIVELY_SCROLLING_TAGS = ['input', 'textarea', 'select']
+    const viewport = document.documentElement.clientWidth
+    const offenders: { selector: string; kind: 'viewport' | 'clipped'; width: number; limit: number }[] = []
+
+    const describe = (el: Element): string => {
+      const classes = typeof el.className === 'string' && el.className.trim().length > 0
+        ? `.${el.className.trim().split(/\s+/).join('.')}`
+        : ''
+      return `${el.tagName.toLowerCase()}${classes}`
+    }
+
+    for (const el of document.querySelectorAll('body, body *')) {
+      const style = getComputedStyle(el)
+      if (style.display === 'none' || style.visibility === 'hidden') continue
+      const rect = el.getBoundingClientRect()
+      if (rect.width === 0 && rect.height === 0) continue
+
+      if (rect.right > viewport + SLACK_PX) {
+        offenders.push({ selector: describe(el), kind: 'viewport', width: Math.round(rect.right), limit: viewport })
+      }
+      const exemptFromClipped = style.overflowX === 'auto' || style.overflowX === 'scroll'
+        || style.textOverflow === 'ellipsis'
+        || NATIVELY_SCROLLING_TAGS.includes(el.tagName.toLowerCase())
+        || el.clientWidth < MIN_MEANINGFUL_WIDTH_PX
+      if (!exemptFromClipped && el.scrollWidth > el.clientWidth + SLACK_PX) {
+        offenders.push({ selector: describe(el), kind: 'clipped', width: el.scrollWidth, limit: el.clientWidth })
+      }
+    }
+    return offenders
+  })
 }

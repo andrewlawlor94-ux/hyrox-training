@@ -73,6 +73,7 @@ const PRESERVE_STATUSES: readonly WorkoutStatus[] = ['inProgress']
 function withDerivedFields(
   instance: WorkoutInstance,
   status: WorkoutStatus,
+  plannedDate: ISODate,
   scheduledDate: ISODate | null,
   isManualOverride: boolean,
   adjustmentReason: string | null,
@@ -83,7 +84,12 @@ function withDerivedFields(
     templateId: instance.templateId,
     weekNumber: instance.weekNumber,
     sessionSlot: instance.sessionSlot,
-    plannedDate: instance.plannedDate,
+    // Adopted from the domain result, not carried over: `plannedDate` is
+    // DERIVED from `Plan.startDate` + week/slot, so once the plan is
+    // re-anchored to a new race date the stored value is simply stale. Only
+    // reached for non-frozen instances (the caller skips frozen ones), so a
+    // completed session's recorded date is never rewritten.
+    plannedDate,
     scheduledDate: scheduledDate ?? instance.scheduledDate,
     sequence: instance.sequence,
     priority: instance.priority,
@@ -101,10 +107,14 @@ function withDerivedFields(
 
 /**
  * Recomputes the schedule from the immutable plan + append-only journal +
- * overrides, then persists **only** `scheduledDate`, `status`,
+ * overrides, then persists **only** `plannedDate`, `scheduledDate`, `status`,
  * `adjustmentReason`, and `isManualOverride` back onto non-frozen
  * `WorkoutInstance` rows — never onto a frozen one, and never any other
- * field. Idempotent: given the same `today` and unchanged events/overrides,
+ * field. (`plannedDate` is included because it is derived from
+ * `Plan.startDate`: re-anchoring the plan to a changed race date must move it,
+ * or every screen reading it keeps showing dates from the old race date.)
+ *
+ * Idempotent: given the same `today` and unchanged events/overrides,
  * `recomputeQueue` is a pure function of them, so re-running produces the
  * identical derived instance state on every call (`queueExplanations` rows
  * get fresh ids each run since the table is a fully-replaced cache, but their
@@ -177,7 +187,7 @@ export async function syncQueue(today: ISODate): Promise<ReturnType<typeof recom
           scheduled.status === 'upcoming' && scheduled.scheduledDate === today ? 'available' : scheduled.status
 
         await db.workoutInstances.put(
-          withDerivedFields(instance, derivedStatus, scheduled.scheduledDate, scheduled.isManualOverride, scheduled.adjustmentReason),
+          withDerivedFields(instance, derivedStatus, scheduled.plannedDate, scheduled.scheduledDate, scheduled.isManualOverride, scheduled.adjustmentReason),
         )
       }
 

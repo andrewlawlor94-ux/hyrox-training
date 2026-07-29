@@ -1,10 +1,11 @@
 import type { ChangeEvent, FC } from 'react'
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { getActiveGoal, setRaceGoal, syncQueue } from '@/data/repositories'
+import { getActiveGoal, reanchorActivePlanToRaceDate, setRaceGoal } from '@/data/repositories'
 import type { RaceGoal } from '@/data/types'
 import { useToday } from '@/hooks/useToday'
 import { anchorPlan } from '@/domain/planGeneration/anchor'
+import type { ReanchorDecision } from '@/domain/planGeneration/reanchor'
 import { goalTargets } from '@/domain/milestones/goalTargets'
 import { formatDuration, formatPace, formatRaceTime, parseRaceTime } from '@/domain/units/format'
 
@@ -17,9 +18,14 @@ function logAndIgnore(err: unknown): void {
  * 19) already draws. */
 const SHORT_PLAN_WARNING = 'shortPlan'
 
-async function commitGoal(patch: { raceDate: string; targetSeconds: number; stretchSeconds: number }, today: string): Promise<void> {
+/** Returns the re-anchor decision so the caller can tell the athlete what moved.
+ * `reanchorActivePlanToRaceDate` runs `syncQueue` itself, so this does not. */
+async function commitGoal(
+  patch: { raceDate: string; targetSeconds: number; stretchSeconds: number },
+  today: string,
+): Promise<ReanchorDecision | null> {
   await setRaceGoal(patch, new Date().toISOString())
-  await syncQueue(today)
+  return reanchorActivePlanToRaceDate({ today })
 }
 
 /**
@@ -37,6 +43,11 @@ export const GoalSettings: FC = () => {
   const [stretchText, setStretchText] = useState('')
   const [timeError, setTimeError] = useState<string | null>(null)
   const [dateWarning, setDateWarning] = useState<string | null>(null)
+  // What the plan actually did in response to the new race date. Shown
+  // separately from `dateWarning` (which is `anchorPlan`'s "under 24 weeks
+  // remain" note) because they answer different questions: one is about the
+  // runway, the other about which of the athlete's session dates just moved.
+  const [reanchorNote, setReanchorNote] = useState<string | null>(null)
   // Guards the resync-from-`goal` effect below against clobbering
   // in-progress typing: committing ONE field (e.g. target, on blur) makes
   // `goal` re-emit from the live query while the OTHER field may still be
@@ -60,6 +71,7 @@ export const GoalSettings: FC = () => {
       return
     }
     setTimeError(null)
+    // A time-only change cannot move race week, so no re-anchor note is shown.
     void commitGoal({ raceDate: current.raceDate, targetSeconds, stretchSeconds }, today).catch(logAndIgnore)
   }
 
@@ -68,7 +80,14 @@ export const GoalSettings: FC = () => {
     if (!raceDate) return
     const anchor = anchorPlan({ today, raceDate })
     setDateWarning(anchor.warnings.includes(SHORT_PLAN_WARNING) ? anchor.explanation : null)
-    void commitGoal({ raceDate, targetSeconds: current.targetSeconds, stretchSeconds: current.stretchSeconds }, today).catch(logAndIgnore)
+    setReanchorNote(null)
+    void commitGoal({ raceDate, targetSeconds: current.targetSeconds, stretchSeconds: current.stretchSeconds }, today)
+      .then((decision) => {
+        // 'alreadyAligned' is the no-op case; saying "nothing changed" on every
+        // trivial edit is noise.
+        setReanchorNote(decision && decision.outcome !== 'alreadyAligned' ? decision.explanation : null)
+      })
+      .catch(logAndIgnore)
   }
 
   if (!goal) return null
@@ -90,6 +109,7 @@ export const GoalSettings: FC = () => {
         />
       </div>
       {dateWarning && <p className="onboarding-step__warning" role="alert">{dateWarning}</p>}
+      {reanchorNote && <p className="onboarding-step__note" role="status">{reanchorNote}</p>}
 
       <div className="onboarding-field">
         <label htmlFor="settings-target-time" className="onboarding-field__label">Target time</label>

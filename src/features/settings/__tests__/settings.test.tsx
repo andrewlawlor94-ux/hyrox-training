@@ -3,6 +3,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { db, resetDatabase } from '@/data/db'
 import { getActiveGoal, readProfile, updateSettings } from '@/data/repositories'
+import type { Plan, WorkoutInstance } from '@/data/types'
+import { addDays as addDaysIso } from '@/domain/dates'
 import { renderApp } from '@/test/renderApp'
 import { seedTestDb } from '@/test/seedTestDb'
 
@@ -20,6 +22,24 @@ async function onboard(): Promise<void> {
 async function renderSettings(): Promise<void> {
   renderApp({ route: '/settings' })
   await screen.findByRole('heading', { level: 1, name: /settings/i })
+}
+
+async function activePlan(): Promise<Plan> {
+  const settings = await db.settings.get('app')
+  const plan = settings ? await db.plans.get(settings.activePlanId) : undefined
+  if (!plan) throw new Error('expected an active plan')
+  return plan
+}
+
+/** The furthest-out non-frozen instance — the one whose date a re-anchor must
+ * move, and the one carrying the taper. */
+async function lastUpcomingInstance(): Promise<WorkoutInstance> {
+  const open = (await db.workoutInstances.toArray())
+    .filter((i) => !i.frozen)
+    .sort((a, b) => b.weekNumber - a.weekNumber || b.sessionSlot - a.sessionSlot)
+  const last = open[0]
+  if (!last) throw new Error('expected at least one upcoming instance')
+  return last
 }
 
 beforeEach(async () => {
@@ -111,6 +131,52 @@ describe('Settings-lite: race goal and date', () => {
       expect(goal?.raceDate).toBe('2026-02-01')
     })
     expect(await screen.findByText(/fewer than 24 weeks/i)).toBeInTheDocument()
+
+    // The race moved CLOSER, so the start deliberately does not move: pulling it
+    // backwards would drag plan weeks into the past, where placement finds no
+    // candidate day and the sessions in them are dropped rather than moved.
+    const plan = await activePlan()
+    expect(plan.startDate).toBe('2026-01-05')
+    expect(await screen.findByText(/closer than the remaining plan/i)).toBeInTheDocument()
+  })
+
+  // Without this, `setRaceGoal` swapped the goal row and appended the event but
+  // nothing re-anchored `Plan.startDate` -- every session date is derived from
+  // it, so a postponed race left the whole plan, and its taper, landing weeks
+  // early no matter how often the queue recomputed.
+  it('re-anchors the plan when the race is postponed, moving upcoming dates but never completed ones', async () => {
+    await seedTestDb({ withHistory: true })
+    await onboard()
+
+    // The fixture is exactly 24 weeks: today 2026-01-05 (Monday) -> race
+    // 2026-06-15, so the plan starts today and week 24 is race week.
+    expect((await activePlan()).startDate).toBe('2026-01-05')
+
+    const frozenBefore = (await db.workoutInstances.toArray()).filter((i) => i.frozen)
+    expect(frozenBefore.length).toBeGreaterThan(0)
+
+    const upcomingBefore = await lastUpcomingInstance()
+
+    await renderSettings()
+    const dateInput = await screen.findByLabelText(/race date/i)
+    // Three weeks later, same weekday.
+    fireEvent.change(dateInput, { target: { value: '2026-07-06' } })
+
+    await waitFor(async () => {
+      expect((await activePlan()).startDate).toBe('2026-01-26')
+    })
+
+    // Upcoming work re-dates by the same three weeks...
+    await waitFor(async () => {
+      const after = await db.workoutInstances.get(upcomingBefore.id)
+      expect(after?.plannedDate).toBe(addDaysIso(upcomingBefore.plannedDate, 21))
+    })
+
+    // ...and every completed session is byte-identical, dates included.
+    const frozenAfter = await Promise.all(frozenBefore.map((i) => db.workoutInstances.get(i.id)))
+    expect(frozenAfter).toEqual(frozenBefore)
+
+    expect(await screen.findByText(/shifts 3 weeks/i)).toBeInTheDocument()
   })
 })
 

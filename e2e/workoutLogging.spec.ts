@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { completeOnboarding, exerciseCard, hasHorizontalScroll, parseDurationText, readStore } from './helpers'
+import { completeOnboarding, exerciseCard, horizontalOverflow, parseDurationText, readStore } from './helpers'
 
 /** Just the fields this spec reads back out of IndexedDB directly — a
  * narrowed local view of `src/data/types/logs.ts`'s `StrengthSet`. */
@@ -36,8 +36,15 @@ const REST_TOLERANCE_AHEAD_SEC = 5
  * again -- see the call site for why this must be a real wait, not a mock. */
 const REST_TOLERANCE_WAIT_MS = 3000
 
+/** iPhone SE (3rd gen) / iPhone 13 mini — the smallest screen this app has to
+ * work on, and narrower than the iPhone 13 profile the suite otherwise uses. */
+const NARROWEST_IPHONE_WIDTH_PX = 375
+const NARROWEST_IPHONE_HEIGHT_PX = 667
+
 async function expectNoHorizontalScroll(page: Page): Promise<void> {
-  expect(await hasHorizontalScroll(page)).toBe(false)
+  // Asserting on the offender list rather than a boolean so a failure says
+  // WHICH element overflowed and by how much.
+  expect(await horizontalOverflow(page)).toEqual([])
 }
 
 test('logs a set with one tap, survives reload, and finishes partially — never as completed', async ({ page }) => {
@@ -127,6 +134,15 @@ test('logs a set with one tap, survives reload, and finishes partially — never
   await expect(page.getByRole('heading', { name: /Week \d+ · Session \d+/ })).toBeVisible()
   await expectNoHorizontalScroll(page)
   await expect(backSquat.getByLabel('Weight, set 2')).toHaveValue(String(TEST_SET_2_WEIGHT))
+
+  // The workout screen is the densest layout in the app (a set row is five
+  // columns of controls), so check it at the NARROWEST current iPhone too, not
+  // just this project's iPhone 13 profile. Restored immediately afterwards so
+  // the rest of the test runs at the configured viewport.
+  const configuredViewport = page.viewportSize()
+  await page.setViewportSize({ width: NARROWEST_IPHONE_WIDTH_PX, height: NARROWEST_IPHONE_HEIGHT_PX })
+  await expectNoHorizontalScroll(page)
+  if (configuredViewport) await page.setViewportSize(configuredViewport)
 
   const instancesAfterReload = await readStore<WorkoutInstanceRow>(page, 'workoutInstances')
   const inProgressCount = instancesAfterReload.filter((row) => row.status === 'inProgress').length

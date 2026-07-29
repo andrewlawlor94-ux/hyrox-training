@@ -1,6 +1,8 @@
 import { db } from '@/data/db'
 import type { EditScope, Exercise, ISODate, ISOInstant, Plan, Prescription } from '@/data/types'
 import { anchorPlan } from '@/domain/planGeneration/anchor'
+import type { ReanchorDecision } from '@/domain/planGeneration/reanchor'
+import { reanchorToRaceDate } from '@/domain/planGeneration/reanchor'
 import { DEFAULT_STRETCH_SECONDS, DEFAULT_TARGET_SECONDS } from '@/domain/milestones/constants'
 import { PLAN_WEEKS_DEFAULT } from '@/domain/planGeneration/constants'
 import { assertMutable } from './guard'
@@ -172,6 +174,44 @@ export async function restoreSeedPlanPreservingHistory(args: { today: ISODate; n
 
   await syncQueue(args.today)
   return plan
+}
+
+/**
+ * Re-establishes "the plan's final week is race week" after the athlete changes
+ * their race date mid-plan (D1). `setRaceGoal` alone only appends the event and
+ * swaps the goal row — `Plan.startDate` is what every session date is derived
+ * from, so without this a postponed race left the whole plan (and its taper)
+ * landing weeks early, and no amount of `syncQueue`ing moved it.
+ *
+ * All the judgement lives in the pure `reanchorToRaceDate`; this only persists
+ * its decision. Completed history is untouched by construction: nothing here
+ * writes to a `WorkoutInstance` at all, and the `syncQueue` that follows skips
+ * every frozen row, so a completed session keeps its recorded dates while
+ * upcoming ones re-derive from the new start.
+ *
+ * Returns the decision so the caller can show the athlete what happened.
+ */
+export async function reanchorActivePlanToRaceDate(args: { today: ISODate }): Promise<ReanchorDecision | null> {
+  const decision = await db.transaction('rw', db.tables, async () => {
+    const settings = await getSettings()
+    const plan = await db.plans.get(settings.activePlanId)
+    if (!plan) return null
+    const goal = await db.raceGoals.filter((g) => g.isActive).first()
+    if (!goal) return null
+
+    const result = reanchorToRaceDate({
+      currentStartDate: plan.startDate, weeksCount: plan.weeksCount, raceDate: goal.raceDate,
+    })
+    if (result.outcome === 'startShiftedLater') {
+      await db.plans.put({ ...plan, startDate: result.startDate })
+    }
+    return result
+  })
+
+  // Outside the transaction: `syncQueue` opens its own, and it is what turns the
+  // new `startDate` into actual re-derived instance dates.
+  await syncQueue(args.today)
+  return decision
 }
 
 function mapPrescriptionPatchToExercise(patch: Partial<Prescription>): Partial<Exercise> {
