@@ -21,6 +21,14 @@ import { WorkoutScreen } from '@/features/workout/WorkoutScreen'
 const ProgressScreen = lazy(() =>
   import('@/features/progress/ProgressScreen').then((module) => ({ default: module.ProgressScreen })))
 
+/** The exercise library (Task 28, §13) is reached from a Settings link, not
+ * a bottom-nav tab (see `navItems.ts`) or a Plan tab that doesn't exist yet
+ * -- so it's visited far less often than Home/Progress/Settings. Lazy for
+ * the same reason Progress is: an athlete who never opens it shouldn't pay
+ * for its chunk on first paint. */
+const LibraryScreen = lazy(() =>
+  import('@/features/library/LibraryScreen').then((module) => ({ default: module.LibraryScreen })))
+
 /**
  * Home, Settings, Workout logging, and Progress (all four laid out inside
  * `AppShell`, so the rest-timer bar and bottom nav stay visible) plus
@@ -85,6 +93,16 @@ export const AppRoutes: FC = () => (
           <ErrorBoundary>
             <Suspense fallback={<p className="route-loading">Loading…</p>}>
               <ProgressScreen />
+            </Suspense>
+          </ErrorBoundary>
+        )}
+      />
+      <Route
+        path="/library"
+        element={(
+          <ErrorBoundary>
+            <Suspense fallback={<p className="route-loading">Loading…</p>}>
+              <LibraryScreen />
             </Suspense>
           </ErrorBoundary>
         )}

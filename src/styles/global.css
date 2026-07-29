@@ -439,4 +439,59 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .running-progress__stats, .running-progress__trajectory { display: flex; flex-direction: column; gap: var(--space-2); }
 .running-progress__no-benchmark { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
 
+/* ---------- Exercise library (Task 28, §13) ---------- */
+.library-screen { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.library-screen__heading { font-size: var(--font-size-2xl); margin: 0; }
+.library-screen__controls { display: flex; flex-direction: column; gap: var(--space-3); }
+.library-screen__archived-toggle { display: flex; align-items: center; gap: var(--space-2); min-height: var(--tap-min); }
+.library-screen__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.library-screen__row {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  min-height: var(--tap-min); padding: var(--space-2) var(--space-3); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-control); text-align: left;
+}
+.library-screen__row-name { font-weight: 600; overflow-wrap: anywhere; }
+.library-screen__row-chips { display: flex; gap: var(--space-1); flex-wrap: wrap; flex-shrink: 0; }
+
+/* Shared field wrapper for the library's plain (non-NumberField) inputs --
+   text input, select, textarea -- same recipe as `.onboarding-field`, kept
+   as its own scoped class rather than reused across features (matching how
+   every other screen scopes its own field classes, e.g.
+   `.strength-progress__picker-select`). */
+.library-field { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.library-field__label { font-size: var(--font-size-sm); font-weight: 600; color: var(--text-muted); }
+.library-field__input, .library-field__select, .library-field__textarea {
+  min-height: var(--tap-min); font-size: var(--input-font-size); border: 1px solid var(--border);
+  border-radius: var(--radius-control); padding: var(--space-2) var(--space-3);
+  background: var(--bg); color: var(--text); width: 100%;
+}
+.library-field__textarea { resize: vertical; }
+.library-field__note { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
+.library-field__error { margin: 0; color: var(--elevated); font-size: var(--font-size-sm); }
+
+/* A grid, never a `<fieldset>`, lays out the form's paired numeric fields --
+   `auto-fit`/`minmax`/`1fr` let it shrink and wrap freely at 375px, unlike a
+   fieldset's UA `min-inline-size: min-content`, which is what produced real
+   horizontal page scroll the last time this app used one for a multi-target
+   row (see `ScaleSelector`'s own note). */
+.exercise-form { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.exercise-form__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--space-3); min-width: 0; }
+.exercise-form__section-heading { font-size: var(--font-size-sm); text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-muted); margin: var(--space-2) 0 0; }
+.exercise-form__archived-toggle { display: flex; align-items: center; gap: var(--space-2); min-height: var(--tap-min); }
+.exercise-form__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+.exercise-detail { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.exercise-detail__badges { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.exercise-detail__fields { display: grid; grid-template-columns: 1fr auto; gap: var(--space-1) var(--space-3); margin: 0; }
+.exercise-detail__fields dt { color: var(--text-muted); }
+.exercise-detail__fields dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.exercise-detail__notes { margin: 0; color: var(--text-muted); }
+.exercise-detail__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.exercise-detail__history-heading { font-size: var(--font-size-lg); margin: 0; }
+
+.exercise-history-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.exercise-history-list__row { padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+.exercise-history-list__date { margin: 0; font-weight: 600; }
+.exercise-history-list__sets { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
+
 
