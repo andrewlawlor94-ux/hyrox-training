@@ -206,3 +206,15 @@ export const TRAJECTORY_NEEDS_ATTENTION_DELTA = -2
  * prediction (D14).
  */
 export const RACE_ESTIMATE_BAND_FRACTION = 0.04
+
+/**
+ * The shipped default race goal: 1:35:00 target, 1:30:00 stretch (D16).
+ *
+ * These exist as constants specifically so nothing has to invent a stand-in
+ * goal. A placeholder of `targetSeconds: 0` is not "no goal" — it is a goal of
+ * zero seconds, which silently propagates through `goalTargets` into nonsense
+ * pace milestones, and leaked into an assertion as a real `0`. Any code that
+ * needs a goal before the athlete has chosen one uses these instead.
+ */
+export const DEFAULT_TARGET_SECONDS = 5700
+export const DEFAULT_STRETCH_SECONDS = 5400

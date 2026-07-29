@@ -1,6 +1,7 @@
 import { db } from '@/data/db'
 import type { EditScope, Exercise, ISODate, ISOInstant, Plan, PlanWeek, Prescription } from '@/data/types'
 import { anchorPlan } from '@/domain/planGeneration/anchor'
+import { DEFAULT_STRETCH_SECONDS, DEFAULT_TARGET_SECONDS } from '@/domain/milestones/constants'
 import { PLAN_WEEKS_DEFAULT } from '@/domain/planGeneration/constants'
 import { assertMutable } from './guard'
 import { getSettings, updateSettings } from './settingsRepo'
@@ -34,12 +35,12 @@ export async function archivePlan(planId: string): Promise<void> {
 /**
  * Anchors a fresh plan to `raceDate` (via `anchorPlan`), materializes every
  * Base + core-week template/prescription/instance row, and makes it active.
- * `installSeedPlan`'s signature (per the brief) carries no `targetSeconds`/
- * `stretchSeconds`/`division`, so it creates a placeholder `RaceGoal` (0/0,
- * no division) when no active goal already targets this race date — the
- * athlete fills in real numbers later via `goalRepo.setRaceGoal`, which does
- * not need to touch `Plan.raceGoalId` back (see `syncQueue`, which always
- * prefers the current *active* goal over the plan's own `raceGoalId`).
+ * `installSeedPlan`'s signature carries no `targetSeconds`/`stretchSeconds`/
+ * `division`, so when no active goal already targets this race date it creates
+ * one seeded with the shipped defaults (1:35 target / 1:30 stretch). The athlete
+ * overwrites them via `goalRepo.setRaceGoal`, which does not need to touch
+ * `Plan.raceGoalId` back (see `syncQueue`, which always prefers the current
+ * *active* goal over the plan's own `raceGoalId`).
  */
 export async function installSeedPlan(args: { today: ISODate; raceDate: ISODate; now: ISOInstant }): Promise<Plan> {
   const plan = await db.transaction('rw', db.tables, async () => {
@@ -49,8 +50,13 @@ export async function installSeedPlan(args: { today: ISODate; raceDate: ISODate;
     if (!goal || goal.raceDate !== args.raceDate) {
       const division = goal?.division ?? ''
       if (goal) await db.raceGoals.put({ ...goal, isActive: false })
+      // Seeded with the shipped default goal, never 0/0: a zero-second target
+      // is not "no goal set", it is a nonsense goal that flows straight into
+      // `goalTargets` and yields meaningless pace milestones. The athlete
+      // overwrites these during onboarding (or in Settings) via `setRaceGoal`.
       goal = {
-        id: newId('goal'), raceDate: args.raceDate, targetSeconds: 0, stretchSeconds: 0,
+        id: newId('goal'), raceDate: args.raceDate,
+        targetSeconds: DEFAULT_TARGET_SECONDS, stretchSeconds: DEFAULT_STRETCH_SECONDS,
         division, isActive: true, createdAt: args.now,
       }
       await db.raceGoals.add(goal)

@@ -66,10 +66,18 @@ describe('Settings-lite: race goal and date', () => {
     await onboard()
     await renderSettings()
 
+    // Set the whole value in one change rather than typing it character by
+    // character. `commitTimes` correctly refuses to persist a value
+    // `parseRaceTime` cannot parse, and a per-keystroke `userEvent.type` under
+    // this file's fake timers left the field mid-value ('1:2', '1:20:') when
+    // blur fired — so the write was legitimately skipped and the goal stayed at
+    // the seeded default. That made the test fail ~2 runs in 3 under parallel
+    // load while the app behaviour was correct. This still asserts the real
+    // requirement: the parsed value reaches the database on blur.
     const targetInput = await screen.findByLabelText(/target time/i)
-    await userEvent.clear(targetInput)
-    await userEvent.type(targetInput, '1:20:00')
-    await userEvent.tab()
+    fireEvent.focus(targetInput)
+    fireEvent.change(targetInput, { target: { value: '1:20:00' } })
+    fireEvent.blur(targetInput)
 
     await waitFor(async () => {
       const goal = await getActiveGoal()
@@ -80,9 +88,9 @@ describe('Settings-lite: race goal and date', () => {
     expect(screen.getByText(/Standalone 5 km/i)).toBeInTheDocument()
 
     const stretchInput = screen.getByLabelText(/stretch time/i)
-    await userEvent.clear(stretchInput)
-    await userEvent.type(stretchInput, '1:25:00')
-    await userEvent.tab()
+    fireEvent.focus(stretchInput)
+    fireEvent.change(stretchInput, { target: { value: '1:25:00' } })
+    fireEvent.blur(stretchInput)
 
     await waitFor(async () => {
       const goal = await getActiveGoal()
