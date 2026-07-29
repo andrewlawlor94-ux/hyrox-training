@@ -92,6 +92,18 @@ describe('SEED_WEEKS_24 structure', () => {
     }
   })
 
+  // The aggregate checks below all run over `allPrescriptions()`, which a
+  // template contributing ZERO prescriptions passes vacuously -- the exact shape
+  // that let three Base weeks ship with no exercises at all. Assert per
+  // template, and name the offenders, so an empty session cannot hide inside a
+  // healthy total.
+  it('every template prescribes at least one exercise', () => {
+    const templates = allTemplates()
+    expect(templates.length).toBeGreaterThan(0)
+    const empty = templates.filter((t) => t.prescriptions.length === 0).map((t) => t.name)
+    expect(empty).toEqual([])
+  })
+
   it('every prescriptions[].exerciseId resolves against SEED_EXERCISES', () => {
     const prescriptions = allPrescriptions()
     expect(prescriptions.length).toBeGreaterThan(0)

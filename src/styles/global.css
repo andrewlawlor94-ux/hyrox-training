@@ -34,7 +34,12 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); box-shadow: var(--shadow-card); padding: var(--space-4); }
 
 /* ---------- Button ---------- */
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); border-radius: var(--radius-control); border: 1px solid transparent; font-weight: 600; }
+/* min-height and padding live on `.btn` itself, not only on the size modifiers,
+   so ANY element carrying the class is tap-compliant. A `<Link>` styled as a
+   button is an <a>, which the `button { min-height }` rule below never reaches:
+   the library link rendered ~25px tall because it also carried no size modifier.
+   Fixing the class closes the whole class of bug rather than that one instance. */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); min-height: var(--tap-min); padding: 0 var(--space-4); border-radius: var(--radius-control); border: 1px solid transparent; font-weight: 600; text-decoration: none; }
 .btn--md { padding: 0 var(--space-4); }
 .btn--sm { padding: 0 var(--space-3); font-size: var(--font-size-sm); }
 .btn--primary { background: var(--accent); color: #fff; }
@@ -114,12 +119,12 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .empty-state__action { margin-top: var(--space-4); }
 
 /* ---------- ErrorBoundary ---------- */
-.error-boundary { padding: var(--space-5); text-align: center; }
+.error-boundary { padding-top: calc(var(--content-inset) + var(--safe-top)); padding-left: calc(var(--content-inset) + var(--safe-left)); padding-right: calc(var(--content-inset) + var(--safe-right)); padding-bottom: calc(var(--content-inset) + var(--safe-bottom)); text-align: center; }
 .error-boundary__title { font-size: var(--font-size-xl); font-weight: 600; margin: 0 0 var(--space-2); color: var(--elevated); }
 .error-boundary__message { margin: 0 0 var(--space-4); color: var(--text-muted); font-size: var(--font-size-sm); word-break: break-word; }
 
 /* ---------- App shell / boot ---------- */
-.boot-gate__loading, .app-shell__loading { padding: var(--space-5); color: var(--text-muted); }
+.boot-gate__loading, .app-shell__loading { padding-top: calc(var(--content-inset) + var(--safe-top)); padding-left: calc(var(--content-inset) + var(--safe-left)); padding-right: calc(var(--content-inset) + var(--safe-right)); padding-bottom: calc(var(--content-inset) + var(--safe-bottom)); color: var(--text-muted); }
 .app-shell { display: flex; flex-direction: column; min-height: 100vh; }
 .app-shell__main {
   flex: 1 1 auto;
@@ -212,7 +217,9 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .home-screen__urgent-card { display: flex; flex-direction: column; gap: var(--space-2); border-color: var(--elevated); }
 .settings-screen__section { display: flex; flex-direction: column; gap: var(--space-3); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
 .settings-screen__section h2 { font-size: var(--font-size-lg); margin: 0; }
-.settings-screen__vibration { border: none; margin: 0; padding: 0; }
+/* `min-inline-size: 0` for the same reason as .scale-selector: a bare fieldset
+   inherits the UA's `min-content` floor and widens the page past the viewport. */
+.settings-screen__vibration { border: none; margin: 0; padding: 0; min-inline-size: 0; }
 .settings-screen__note { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
 .settings-screen__status { margin: 0; font-size: var(--font-size-sm); }
 .settings-screen__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
@@ -249,7 +256,13 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .goal-snapshot-card__estimate, .goal-snapshot-card__no-estimate { margin: 0; }
 
 /* ---------- Onboarding (race date -> profile -> goal) ---------- */
-.onboarding-step { display: flex; flex-direction: column; gap: var(--space-4); padding-bottom: var(--space-6); }
+/* Rendered OUTSIDE AppShell (onboarding is a sibling route; BootGate returns
+   before AppRoutes mounts), so none of these inherit .app-shell__main's insets.
+   index.html sets viewport-fit=cover, so without an explicit safe area the
+   onboarding wizard sits flush to both bezels with its heading under the
+   Dynamic Island - and DbErrorScreen is the one screen an athlete sees when
+   their training log will not open. */
+.onboarding-step { display: flex; flex-direction: column; gap: var(--space-4); padding-top: calc(var(--content-inset) + var(--safe-top)); padding-left: calc(var(--content-inset) + var(--safe-left)); padding-right: calc(var(--content-inset) + var(--safe-right)); padding-bottom: calc(var(--content-inset) + var(--safe-bottom)); }
 .onboarding-step__heading { font-size: var(--font-size-2xl); margin: 0; }
 .onboarding-step__intro { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
 .onboarding-field { display: flex; flex-direction: column; gap: var(--space-1); }
@@ -372,7 +385,7 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .home-screen__urgent-text { margin: 0; color: var(--elevated); font-weight: 600; }
 
 /* ---------- DbErrorScreen (never a blank screen on a boot failure) ---------- */
-.db-error-screen { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-3); text-align: center; }
+.db-error-screen { padding-top: calc(var(--content-inset) + var(--safe-top)); padding-left: calc(var(--content-inset) + var(--safe-left)); padding-right: calc(var(--content-inset) + var(--safe-right)); padding-bottom: calc(var(--content-inset) + var(--safe-bottom)); display: flex; flex-direction: column; gap: var(--space-3); text-align: center; }
 .db-error-screen__title { font-size: var(--font-size-xl); font-weight: 600; margin: 0; color: var(--elevated); }
 .db-error-screen__message { margin: 0; color: var(--text-muted); }
 .db-error-screen__actions { display: flex; gap: var(--space-3); justify-content: center; flex-wrap: wrap; }
@@ -528,7 +541,8 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .week-detail__row-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
 .week-detail__reorder-btn { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-control); }
 .week-detail__error, .workout-editor__error, .exercise-list-editor__error, .exercise-picker__error,
-.move-workout-control__error, .plan-manager__error, .edit-scope-sheet__error, .past-record-editor__error {
+.move-workout-control__error, .plan-manager__error, .edit-scope-sheet__error, .past-record-editor__error,
+.workout-footer__error {
   margin: 0; color: var(--elevated); font-size: var(--font-size-sm);
 }
 .week-detail__add-form { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }

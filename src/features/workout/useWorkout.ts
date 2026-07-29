@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/data/db'
-import { exerciseHistory, getActiveGoal, getInstanceWithPrescriptions, listSymptomLogs, startWorkout } from '@/data/repositories'
+import { assertMutable, exerciseHistory, getActiveGoal, getInstanceWithPrescriptions, listSymptomLogs, startWorkout } from '@/data/repositories'
 import type {
   Exercise, HyroxStandard, InstancePrescription, IntervalSplit, RunLog, StationLog, StrengthSet, WorkoutInstance,
 } from '@/data/types'
@@ -167,10 +167,20 @@ async function loadWorkout(instanceId: string, today: ISODate): Promise<WorkoutD
  * now just writes the same rows twice; `bulkPut` is a plain overwrite, no
  * unique-constraint error, no duplicate rows, no lost writes.
  */
-async function ensureSetsExist(instancePrescriptionId: string, ctx: { instanceId: string; exerciseId: string }, count: number): Promise<void> {
+async function ensureSetsExist(
+  instancePrescriptionId: string,
+  ctx: { instance: Pick<WorkoutInstance, 'id' | 'frozen'>; exerciseId: string },
+  count: number,
+): Promise<void> {
+  // Same chokepoint every repository write goes through. Without it, merely
+  // OPENING a frozen past session that logged no sets (completed-earlier, or
+  // skipped) writes empty set rows into completed history — viewing history
+  // would mutate it. The caller already skips frozen instances; this makes it
+  // structural rather than a property of one call site.
+  assertMutable(ctx.instance)
   const rows: StrengthSet[] = Array.from({ length: count }, (_, index) => ({
     id: `${instancePrescriptionId}_s${String(index)}`,
-    instanceId: ctx.instanceId,
+    instanceId: ctx.instance.id,
     instancePrescriptionId,
     exerciseId: ctx.exerciseId,
     setIndex: index,
@@ -217,11 +227,14 @@ export function useWorkout(instanceId: string, today: ISODate): WorkoutData | un
 
   useEffect(() => {
     if (data === undefined) return
+    // A frozen instance is completed history and is never seeded — see
+    // `ensureSetsExist`, which asserts this too.
+    if (data.instance.frozen) return
     for (const item of data.exercises) {
       if (item.kind !== 'strength') continue
       if (item.sets.length > 0) continue
       const count = item.prescription.sets ?? item.exercise.defaultSets ?? 1
-      ensureSetsExist(item.prescription.id, { instanceId: item.prescription.instanceId, exerciseId: item.exercise.id }, count).catch(() => {})
+      ensureSetsExist(item.prescription.id, { instance: data.instance, exerciseId: item.exercise.id }, count).catch(() => {})
     }
   }, [data])
 

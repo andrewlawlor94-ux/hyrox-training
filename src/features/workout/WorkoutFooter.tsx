@@ -11,6 +11,7 @@ import type { RedFlagAnswers } from '@/domain/symptoms/redFlags'
 import { hasUrgentRedFlag } from '@/domain/symptoms/redFlags'
 import { RED_FLAG_SCREEN_SCIATIC_MIN } from '@/domain/symptoms/constants'
 import { RedFlagScreen } from '@/features/symptoms/RedFlagScreen'
+import { useAutosaveScope } from './autosaveScope'
 import { CompletedEarlierSheet } from './CompletedEarlierSheet'
 import { CompletionActions } from './CompletionActions'
 import type { SymptomValues } from './SymptomCapture'
@@ -37,7 +38,9 @@ export const WorkoutFooter: FC<WorkoutFooterProps> = ({ instance, today }) => {
   const [redFlagAnswers, setRedFlagAnswers] = useState<RedFlagAnswers>(BLANK_RED_FLAG_ANSWERS)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [disabled, setDisabled] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const inFlight = useRef(false)
+  const autosaveScope = useAutosaveScope()
 
   // Pure read (safe inside useLiveQuery): whether the SCIATIC STREAM itself
   // is already flagged from history, independent of today's live entry —
@@ -66,11 +69,21 @@ export const WorkoutFooter: FC<WorkoutFooterProps> = ({ instance, today }) => {
     if (inFlight.current) return
     inFlight.current = true
     setDisabled(true)
+    setError(null)
     try {
+      // Land every still-debounced field edit BEFORE the completion write, which
+      // sets `frozen: true`. A pending `upsertSet` firing after that throws
+      // `HistoryImmutableError` and the athlete's last weight/reps silently
+      // vanish -- blur alone is not enough, since its flush is fire-and-forget
+      // and races the tap that triggered it.
+      await autosaveScope?.flushAll()
       await action()
       void navigate('/')
     } catch (err) {
+      // Surfaced, not just logged: if ending the session failed, the athlete
+      // is about to walk away believing it was saved.
       console.error('Workout completion failed', err)
+      setError(err instanceof Error ? err.message : 'Could not save this session. Try again.')
     } finally {
       inFlight.current = false
       setDisabled(false)
@@ -128,6 +141,7 @@ export const WorkoutFooter: FC<WorkoutFooterProps> = ({ instance, today }) => {
         onDefer={handleDefer}
         onSkip={handleSkip}
       />
+      {error && <p role="alert" className="workout-footer__error">{error}</p>}
       <CompletedEarlierSheet open={sheetOpen} today={today} onClose={() => { setSheetOpen(false) }} onConfirm={handleCompletedEarlier} />
     </div>
   )

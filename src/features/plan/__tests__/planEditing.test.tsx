@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { db, resetDatabase } from '@/data/db'
 import { updateSettings } from '@/data/repositories'
 import { seedIfEmpty } from '@/data/seed/seedRunner'
-import type { InstancePrescription, Prescription, WorkoutInstance, WorkoutTemplate } from '@/data/types'
+import type { InstancePrescription, Prescription, StrengthSet, WorkoutInstance, WorkoutTemplate } from '@/data/types'
 import { renderApp } from '@/test/renderApp'
 
 const NOW = '2026-08-24T09:00:00.000Z'
@@ -107,6 +107,57 @@ describe('the Plan tab / week browser', () => {
     const pastRecordButton = within(dialog).getByRole('button', { name: 'Edit this past record' })
     await userEvent.click(pastRecordButton)
     expect(within(dialog).getByText(/changes what actually happened/i)).toBeInTheDocument()
+  })
+
+  // This is the one path licensed to overwrite frozen history, so a partial
+  // value must never reach the record. Undebounced, typing "200" wrote 2, then
+  // 20, then 200 -- two of those plainly wrong, and readable by any live query
+  // in between (or left behind by a crash mid-sequence).
+  it('debounces past-record corrections: no partial value is ever written, and blur flushes the final one', async () => {
+    await renderPlan()
+    await userEvent.click(await screen.findByText(/Week 1/))
+    const editButtons = await screen.findAllByRole('button', { name: 'Edit' })
+    await userEvent.click(editButtons[0]!)
+    const dialog = await screen.findByRole('dialog')
+    // `findByRole`, not `getByRole`: the sheet renders "Loading…" until the
+    // instance's live query resolves.
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Edit this past record' }))
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Yes, edit this record' }))
+
+    // Observe the WRITES, not the resulting row: "read the row back and it is
+    // still 175" passes against the undebounced version too, because the
+    // intermediate write may simply not have committed yet when the read runs.
+    // Recording every weight Dexie is actually asked to store makes the
+    // coalescing provable rather than a race. (Verified: this fails with
+    // ["2", "200"] if the debounce is removed.)
+    const written: (number | undefined)[] = []
+    const onUpdating = function (this: unknown, mods: unknown, primKey: string): void {
+      if (primKey === 'set_1') written.push((mods as Partial<StrengthSet>).weight)
+    }
+    db.strengthSets.hook('updating', onUpdating)
+
+    try {
+      const weightInput = await within(dialog).findByLabelText<HTMLInputElement>('Weight')
+      // `fireEvent` rather than `userEvent.type`: both keystroke events must be
+      // provably inside one 250ms debounce window, and userEvent awaits the DOM
+      // between characters (which under a loaded jsdom can exceed it).
+      fireEvent.change(weightInput, { target: { value: '2' } })
+      fireEvent.change(weightInput, { target: { value: '200' } })
+      fireEvent.blur(weightInput)
+
+      await waitFor(async () => {
+        expect((await db.strengthSets.get('set_1'))?.weight).toBe(200)
+      })
+      // Exactly one write, carrying only the final value — never a partial `2`.
+      expect(written).toEqual([200])
+    } finally {
+      db.strengthSets.hook('updating').unsubscribe(onUpdating)
+    }
+
+    // The rest of the logged set is untouched by the correction.
+    const corrected = await db.strengthSets.get('set_1')
+    expect(corrected?.reps).toBe(5)
+    expect(corrected?.isCompleted).toBe(true)
   })
 
   it('a non-frozen workout (even in the past) opens the normal editor', async () => {

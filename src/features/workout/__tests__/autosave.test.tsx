@@ -165,6 +165,45 @@ describe('workout autosave', () => {
     })
   })
 
+  // Completing the workout sets `frozen: true`, after which `upsertSet` throws
+  // `HistoryImmutableError` — so a debounced weight still in flight at that
+  // moment used to be lost, its failure swallowed into console.error. The fix
+  // (an `AutosaveScopeProvider` the footer awaits) is only observable through
+  // the real screen, since the footer and the set rows own separate queues.
+  it('lands a still-debounced weight before completing the workout freezes the instance', async () => {
+    const instanceId = await createWorkout(['ex_back_squat'])
+    await renderWorkout(instanceId)
+    await screen.findByText('Back squat')
+
+    const weightInput = (await screen.findAllByLabelText<HTMLInputElement>(/weight/i))[0]
+    if (!weightInput) throw new Error('expected a weight input')
+    fireEvent.change(weightInput, { target: { value: '225' } })
+    // Deliberately NOT blurred: the pending write is still inside its debounce.
+    expect(await weightSetIndex(instanceId, 0)).toBeUndefined()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Completed' }))
+
+    await waitFor(async () => {
+      expect((await db.workoutInstances.get(instanceId))?.frozen).toBe(true)
+    }, { timeout: REAL_WAIT_LONG_MS })
+    expect(await weightSetIndex(instanceId, 0)).toBe(225)
+  })
+
+  // Merely OPENING completed history must not write to it: a frozen instance
+  // that logged no sets (completed-earlier, or skipped) would otherwise have
+  // empty set rows materialized into it by the seeding effect.
+  it('never materializes set rows into a frozen instance', async () => {
+    const instanceId = await createWorkout(['ex_back_squat'])
+    await db.workoutInstances.update(instanceId, { frozen: true, status: 'completed' })
+
+    await renderWorkout(instanceId)
+    await screen.findByText('Back squat')
+
+    // Give the effect every chance to fire before asserting absence.
+    await new Promise((resolve) => { setTimeout(resolve, 100) })
+    expect(await db.strengthSets.where('instanceId').equals(instanceId).count()).toBe(0)
+  })
+
   it('holds no React state that is absent from the database after a flush — every row survives a remount unchanged', async () => {
     const instanceId = await createWorkout(['ex_back_squat'])
     const { unmount } = await renderWorkout(instanceId)

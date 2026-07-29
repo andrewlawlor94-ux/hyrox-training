@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { AUTOSAVE_DEBOUNCE_MS } from './constants'
+import { useAutosaveScope } from './autosaveScope'
 
 interface PendingEntry {
   timer: ReturnType<typeof setTimeout>
@@ -88,6 +89,13 @@ export function useAutosave(debounceMs = AUTOSAVE_DEBOUNCE_MS): UseAutosaveResul
       void flush()
     }
   }, [flush])
+
+  // Joins the enclosing `AutosaveScopeProvider` (if any) so the component that
+  // completes the workout can await this queue before freezing the instance —
+  // a pending write that lands after `frozen: true` throws and the edit is
+  // lost. No-ops outside a provider.
+  const scope = useAutosaveScope()
+  useEffect(() => scope?.register(flush), [scope, flush])
 
   return { schedule, flushKey, flush }
 }
