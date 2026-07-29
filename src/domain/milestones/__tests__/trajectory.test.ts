@@ -180,13 +180,18 @@ describe('computeTrajectory', () => {
 })
 
 describe('estimateRaceRange', () => {
+  // compromisedKmCount: 6 meets COMPROMISED_KM_REQUIRED_COUNT — a genuinely
+  // complete set of evidence, not merely a non-null mean (I1: a mean can be
+  // computed from as little as one logged kilometre, which is not "enough
+  // real data" by this domain's own stated bar).
   const complete = facts({
     best5kSeconds: 1700,
     compromisedKmMeanSec: 400,
+    compromisedKmCount: 6,
     seventyFiveSimulationDone: true,
   })
 
-  it('returns a range when all three inputs are present', () => {
+  it('returns a range when all four inputs are present', () => {
     const estimate = estimateRaceRange(complete, TARGETS)
     expect(estimate).not.toBeNull()
     expect(estimate?.lowSeconds).toBeGreaterThan(0)
@@ -195,21 +200,36 @@ describe('estimateRaceRange', () => {
   })
 
   it('returns null when only the 5k benchmark and compromised mean exist (no 75% simulation)', () => {
-    const f = facts({ best5kSeconds: 1700, compromisedKmMeanSec: 400, seventyFiveSimulationDone: false })
+    const f = facts({ best5kSeconds: 1700, compromisedKmMeanSec: 400, compromisedKmCount: 6, seventyFiveSimulationDone: false })
     expect(estimateRaceRange(f, TARGETS)).toBeNull()
   })
 
   it('returns null when only the 5k benchmark and the 75% simulation exist (no compromised mean)', () => {
-    const f = facts({ best5kSeconds: 1700, compromisedKmMeanSec: null, seventyFiveSimulationDone: true })
+    const f = facts({ best5kSeconds: 1700, compromisedKmMeanSec: null, compromisedKmCount: 0, seventyFiveSimulationDone: true })
     expect(estimateRaceRange(f, TARGETS)).toBeNull()
   })
 
   it('returns null when only the compromised mean and the 75% simulation exist (no 5k benchmark)', () => {
-    const f = facts({ best5kSeconds: null, compromisedKmMeanSec: 400, seventyFiveSimulationDone: true })
+    const f = facts({ best5kSeconds: null, compromisedKmMeanSec: 400, compromisedKmCount: 6, seventyFiveSimulationDone: true })
     expect(estimateRaceRange(f, TARGETS)).toBeNull()
   })
 
   it('returns null with nothing at all present', () => {
     expect(estimateRaceRange(facts(), TARGETS)).toBeNull()
+  })
+
+  it('I1: returns null when a mean exists but from only a single logged compromised km, well under the required count', () => {
+    // The exact shape of the reported bug: a non-null compromisedKmMeanSec
+    // computed from one effort must not be enough on its own to print a range.
+    const f = facts({ best5kSeconds: 1700, compromisedKmMeanSec: 400, compromisedKmCount: 1, seventyFiveSimulationDone: true })
+    expect(estimateRaceRange(f, TARGETS)).toBeNull()
+  })
+
+  it('I1: returns null one effort short of the required count, and a range once it is met', () => {
+    const oneShort = facts({ best5kSeconds: 1700, compromisedKmMeanSec: 400, compromisedKmCount: 5, seventyFiveSimulationDone: true })
+    expect(estimateRaceRange(oneShort, TARGETS)).toBeNull()
+
+    const metExactly = facts({ best5kSeconds: 1700, compromisedKmMeanSec: 400, compromisedKmCount: 6, seventyFiveSimulationDone: true })
+    expect(estimateRaceRange(metExactly, TARGETS)).not.toBeNull()
   })
 })

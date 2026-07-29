@@ -136,6 +136,57 @@ describe('run logging', () => {
     })
   })
 
+  it('I2/I1 root cause: a zero-value field is never persisted as a "real" run — the row is removed, not saved with a 0', async () => {
+    const instanceId = await createRunWorkout([{ exerciseId: 'ex_easy_run' }])
+    await renderWorkout(instanceId)
+
+    fireEvent.change(screen.getByLabelText(/distance/i), { target: { value: '5' } })
+    fireEvent.change(screen.getByLabelText(/duration/i), { target: { value: '0' } })
+    fireEvent.blur(screen.getByLabelText(/duration/i))
+
+    // Asserting a NEGATIVE outcome ("no row was written") can't use
+    // `waitFor` for its usual "eventually true" purpose — the flush this
+    // triggers is a genuine in-flight async write, so a bare `waitFor`
+    // could pass vacuously on its very first (pre-write) poll. A real delay
+    // comfortably past the flush's write time makes the check land after
+    // whatever the write attempt was actually going to do.
+    await new Promise((resolve) => { setTimeout(resolve, 400) })
+
+    // A zero duration is never a real, loggable run — the stored row must
+    // not exist at all (never `durationSec: 0`), so a downstream mean/best
+    // calculation over the raw table can never be poisoned by it.
+    const logs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
+    expect(logs).toHaveLength(0)
+  })
+
+  it('I3: clearing duration after a real save removes the whole stored row, not just the field', async () => {
+    const instanceId = await createRunWorkout([{ exerciseId: 'ex_easy_run' }])
+    await renderWorkout(instanceId)
+
+    const distanceInput = screen.getByLabelText(/distance/i)
+    const durationInput = screen.getByLabelText(/duration/i)
+    fireEvent.change(distanceInput, { target: { value: '5' } })
+    fireEvent.change(durationInput, { target: { value: '1800' } })
+    fireEvent.blur(durationInput)
+
+    await waitFor(async () => {
+      const logs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
+      expect(logs).toHaveLength(1)
+      expect(logs[0]?.durationSec).toBe(1800)
+    })
+
+    // Clearing the field back out (not re-typing a new value) is the exact
+    // failure scenario: the UI shows blank, and the stored row must match —
+    // not silently keep serving the old duration and its derived pace.
+    fireEvent.change(durationInput, { target: { value: '' } })
+    fireEvent.blur(durationInput)
+
+    await waitFor(async () => {
+      const logs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
+      expect(logs).toHaveLength(0)
+    })
+  })
+
   it('keeps the splits editor collapsed by default behind a single control', async () => {
     const instanceId = await createRunWorkout([{ exerciseId: 'ex_easy_run' }])
     await renderWorkout(instanceId)

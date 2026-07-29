@@ -1,7 +1,15 @@
 /** Seconds in an hour, used to convert a km/duration ratio into km/h. */
 const SEC_PER_HOUR = 3600
 
-function isPositiveFinite(n: number): boolean {
+/**
+ * Exported so every place that needs to know "is this a real, loggable
+ * value" — not just "is it present" — shares one definition rather than
+ * each re-deriving its own (a mismatch between them is exactly how a zero or
+ * negative value slips past one check but not another). `RunBlock` uses this
+ * directly to decide whether a run is loggable at all, independent of
+ * whether it also calls `paceSecPerKm` itself.
+ */
+export function isPositiveFinite(n: number): boolean {
   return Number.isFinite(n) && n > 0
 }
 

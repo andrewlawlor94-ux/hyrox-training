@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { db, resetDatabase } from '@/data/db'
 import type { WorkoutInstance } from '@/data/types'
 import { HistoryImmutableError } from '@/data/errors'
-import { listSymptomLogs, saveRunLog, saveStationLog, saveSymptomLog } from '../logRepo'
+import { deleteRunLog, listSymptomLogs, saveRunLog, saveStationLog, saveSymptomLog } from '../logRepo'
 
 const NOW = '2026-07-27T10:00:00.000Z'
 
@@ -40,6 +40,35 @@ describe('logRepo immutability guard, per table', () => {
     await saveRunLog(log, splits)
     expect(await db.runLogs.get('rl_1')).toBeDefined()
     expect(await db.intervalSplits.get('split_1')).toBeDefined()
+  })
+
+  it('deleteRunLog removes the row and its interval splits (I3: clearing a run field must not leave a stale row)', async () => {
+    await db.workoutInstances.add(makeInstance())
+    const log = { id: 'rl_1', instanceId: 'wi_1', distanceKm: 5, durationSec: 1500, surface: 'road' as const, runType: 'intervals' as const, notes: '', loggedAt: NOW }
+    const splits = [{ id: 'split_1', runLogId: 'rl_1', index: 0, kind: 'work' as const, distanceM: 1000 }]
+    await saveRunLog(log, splits)
+    expect(await db.runLogs.get('rl_1')).toBeDefined()
+    expect(await db.intervalSplits.get('split_1')).toBeDefined()
+
+    await deleteRunLog('rl_1', 'wi_1')
+
+    expect(await db.runLogs.get('rl_1')).toBeUndefined()
+    expect(await db.intervalSplits.get('split_1')).toBeUndefined()
+  })
+
+  it('deleteRunLog on a frozen instance throws HistoryImmutableError and deletes nothing', async () => {
+    await db.workoutInstances.add(makeInstance())
+    const log = { id: 'rl_1', instanceId: 'wi_1', distanceKm: 5, durationSec: 1500, surface: 'road' as const, runType: 'easy' as const, notes: '', loggedAt: NOW }
+    await saveRunLog(log, [])
+    await db.workoutInstances.update('wi_1', { frozen: true, status: 'completed' })
+
+    await expect(deleteRunLog('rl_1', 'wi_1')).rejects.toBeInstanceOf(HistoryImmutableError)
+    expect(await db.runLogs.get('rl_1')).toBeDefined()
+  })
+
+  it('deleteRunLog on a runLogId that was never saved is a harmless no-op', async () => {
+    await db.workoutInstances.add(makeInstance())
+    await expect(deleteRunLog('rl_never_saved', 'wi_1')).resolves.toBeUndefined()
   })
 
   it('saveStationLog on a frozen instance throws HistoryImmutableError', async () => {

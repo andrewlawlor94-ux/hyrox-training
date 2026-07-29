@@ -3,6 +3,7 @@ import type {
 } from '@/data/types'
 import { daysBetween } from '@/domain/dates'
 import type { MilestoneFacts } from '@/domain/milestones/evaluate'
+import { isPositiveFinite, paceSecPerKm } from '@/domain/pace/pace'
 import { ATTENDED_STATUSES, BENCHMARK_5K_TOLERANCE_KM, WALL_BALL_SESSION_REPS, WEEKLY_SESSION_MINIMUM } from './constants'
 
 const BENCHMARK_5K_KM = 5
@@ -46,9 +47,19 @@ function weeklyRunKmSeries(instances: WorkoutInstance[], runLogs: RunLog[]): { w
   return [...perWeek.entries()].map(([weekNumber, km]) => ({ weekNumber, km }))
 }
 
+/**
+ * A log's `distanceKm`/`runType` alone say it is *supposed* to be a 5 km
+ * benchmark or a compromised km — they say nothing about whether its
+ * `durationSec` is a real, positive, finite measurement. A zero or negative
+ * duration (a cleared field, a data-entry slip) is otherwise indistinguishable
+ * from a genuinely fast time, so every consumer below filters on validity,
+ * not just presence (I1/I2) — the project's own repeated defect shape.
+ */
 function best5kSeconds(runLogs: RunLog[]): number | null {
   const candidates = runLogs.filter(
-    (log) => log.runType === 'benchmark' && Math.abs(log.distanceKm - BENCHMARK_5K_KM) <= BENCHMARK_5K_TOLERANCE_KM,
+    (log) => log.runType === 'benchmark'
+      && Math.abs(log.distanceKm - BENCHMARK_5K_KM) <= BENCHMARK_5K_TOLERANCE_KM
+      && isPositiveFinite(log.durationSec),
   )
   if (candidates.length === 0) return null
   return Math.min(...candidates.map((log) => log.durationSec))
@@ -56,7 +67,14 @@ function best5kSeconds(runLogs: RunLog[]): number | null {
 
 function compromisedKmStats(runLogs: RunLog[]): { count: number; meanSec: number | null } {
   const compromised = runLogs.filter((log) => log.runType === 'compromised')
-  const paces = compromised.map((log) => log.paceSecPerKm ?? log.durationSec / log.distanceKm)
+  // Prefers the persisted `paceSecPerKm` (already validated at save time by
+  // `saveRunLog`'s caller); falls back to `paceSecPerKm(...)` — never a raw
+  // division — for older rows that predate that field. Either way this
+  // yields `null`, never `NaN`/`Infinity`, for a non-positive distance or
+  // duration, and `mean` only ever sees the finite, valid values.
+  const paces = compromised
+    .map((log) => log.paceSecPerKm ?? paceSecPerKm(log.distanceKm, log.durationSec))
+    .filter((pace): pace is number => pace !== null)
   return { count: compromised.length, meanSec: mean(paces) }
 }
 

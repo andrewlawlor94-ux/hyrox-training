@@ -19,6 +19,24 @@ export async function saveRunLog(log: RunLog, splits: IntervalSplit[]): Promise<
   })
 }
 
+/**
+ * Removes a run log and its interval splits entirely, rather than leaving a
+ * stale `distanceKm`/`durationSec` behind. `RunLog` requires both fields as
+ * numbers (unlike `StationLog`, where every measurement is optional), so
+ * once the athlete clears a required field there is no valid partial row to
+ * write — the only representation of "no longer a complete, asserted run"
+ * is no row at all. Called by `RunBlock` in place of the save it would
+ * otherwise schedule whenever the merged distance/duration stop being a
+ * genuinely loggable run (I3). A no-op if `runLogId` was never saved.
+ */
+export async function deleteRunLog(runLogId: string, instanceId: string): Promise<void> {
+  await assertMutableFor(instanceId)
+  await db.transaction('rw', db.runLogs, db.intervalSplits, async () => {
+    await db.intervalSplits.where('runLogId').equals(runLogId).delete()
+    await db.runLogs.delete(runLogId)
+  })
+}
+
 /** `StationLog.instanceId` is required, so every station log always has an
  * owning instance to guard against. */
 export async function saveStationLog(log: StationLog): Promise<void> {

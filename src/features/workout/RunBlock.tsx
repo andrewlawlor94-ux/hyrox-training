@@ -2,8 +2,8 @@ import type { ChangeEvent, FC } from 'react'
 import { useState } from 'react'
 import type { IntervalSplit, RunLog, RunType, Surface } from '@/data/types'
 import { Card, NumberField, SegmentedControl } from '@/components'
-import { saveRunLog } from '@/data/repositories'
-import { paceSecPerKm } from '@/domain/pace/pace'
+import { deleteRunLog, saveRunLog } from '@/data/repositories'
+import { isPositiveFinite, paceSecPerKm } from '@/domain/pace/pace'
 import { splitPaceSecPerKm } from '@/domain/pace/intervals'
 import { formatPace } from '@/domain/units/format'
 import { DEFAULT_RUN_TYPE_BY_EXERCISE_ID, RUN_TYPE_OPTIONS, SURFACE_OPTIONS } from './constants'
@@ -18,6 +18,19 @@ const M_PER_KM = 1000
 function defaultRunType(item: RunExerciseVM): RunType {
   if (item.prescription.intervalSpec) return 'intervals'
   return DEFAULT_RUN_TYPE_BY_EXERCISE_ID[item.exercise.id] ?? 'easy'
+}
+
+/**
+ * A `RunLog` is only ever a genuinely asserted run — `distanceKm`/`durationSec`
+ * are required numbers, unlike `StationLog`'s optional measurement fields —
+ * so "loggable" means both are actually present *and* positive-finite, not
+ * merely non-null. `merged.distanceKm === null || merged.durationSec === null`
+ * alone (the previous check) is exactly the assertion-blind-to-validity shape
+ * this project keeps re-introducing (I1/I2/I3): it happily accepted 0 or a
+ * negative value as "present enough to save".
+ */
+function isLoggableRun(distanceKm: number | null, durationSec: number | null): boolean {
+  return distanceKm !== null && durationSec !== null && isPositiveFinite(distanceKm) && isPositiveFinite(durationSec)
 }
 
 function toIntervalSplits(runLogId: string, drafts: DraftSplit[]): IntervalSplit[] {
@@ -65,7 +78,6 @@ export const RunBlock: FC<{ item: RunExerciseVM }> = ({ item }) => {
       runType: patch.runType ?? runType,
       notes: patch.notes ?? notes,
     }
-    if (merged.distanceKm === null || merged.durationSec === null) return
     // Captured here, synchronously, rather than read back off `draftSplits`
     // inside the scheduled closure below — a caller updating splits and
     // scheduling a save in the same handler (`handleSplitsChange`) would
@@ -73,6 +85,15 @@ export const RunBlock: FC<{ item: RunExerciseVM }> = ({ item }) => {
     // apply until the next render.
     const splitsToSave = splitsOverride ?? draftSplits
     autosave.schedule(prescription.id, async () => {
+      if (!isLoggableRun(merged.distanceKm, merged.durationSec)) {
+        // Nothing valid to log. If a row already exists — the athlete
+        // cleared a required field after an earlier save — remove it
+        // entirely rather than leaving the stale value (and its stale
+        // derived pace) behind (I3). If nothing was ever saved, this is a
+        // harmless no-op delete of a row that never existed.
+        await deleteRunLog(runLogId, prescription.instanceId)
+        return
+      }
       const pace = paceSecPerKm(merged.distanceKm as number, merged.durationSec as number)
       const runLog: RunLog = {
         id: runLogId, instanceId: prescription.instanceId, instancePrescriptionId: prescription.id,
@@ -88,7 +109,13 @@ export const RunBlock: FC<{ item: RunExerciseVM }> = ({ item }) => {
   function handleBlur(): void { void autosave.flushKey(prescription.id) }
   function handleSplitsChange(drafts: DraftSplit[]): void {
     setDraftSplits(drafts)
-    if (distanceKm !== null && durationSec !== null) scheduleSave({}, drafts)
+    // `IntervalSplitsEditor` calls `onChange` once on mount regardless of
+    // whether the athlete has touched anything — only bother scheduling
+    // when there is either a genuinely loggable run right now, or a
+    // previously-saved log that might need clearing (I3). Otherwise this
+    // would fire a pointless "delete a row that never existed" on every
+    // mount.
+    if (isLoggableRun(distanceKm, durationSec) || log) scheduleSave({}, drafts)
   }
 
   return (

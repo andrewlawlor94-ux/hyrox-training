@@ -1,6 +1,7 @@
 import type { MilestoneFacts, MilestoneResult } from './evaluate'
 import type { GoalTargets } from './goalTargets'
 import {
+  COMPROMISED_KM_REQUIRED_COUNT,
   RACE_ESTIMATE_BAND_FRACTION,
   RACE_RUN_KM,
   TRAJECTORY_NEEDS_ATTENTION_DELTA,
@@ -105,10 +106,15 @@ export function computeTrajectory(
 
 /**
  * A race-time range, never a point value (D14) — and only ever returned
- * once there is real evidence for all three of its inputs: a 5 km
- * benchmark, a compromised-km mean, and a completed 75% simulation. Missing
- * any one of the three yields `null` rather than a guess built on
- * incomplete data.
+ * once there is real evidence for all four of its inputs: a 5 km
+ * benchmark, a compromised-km mean backed by at least
+ * `COMPROMISED_KM_REQUIRED_COUNT` genuine efforts, and a completed 75%
+ * simulation. Missing any one of these yields `null` rather than a guess
+ * built on incomplete data — the mean alone being non-null is not enough:
+ * `compromisedKmMeanSec` can be computed from as little as a single logged
+ * kilometre, which is not "enough real data" by this domain's own stated
+ * bar (`COMPROMISED_KM_REQUIRED_COUNT`), so the count is checked
+ * independently rather than trusting the mean's mere presence.
  *
  * The projection itself uses only the observed compromised-km mean (the
  * closest available proxy for race-day running pace) plus the station and
@@ -117,8 +123,13 @@ export function computeTrajectory(
  * is enough real data to venture an estimate at all.
  */
 export function estimateRaceRange(facts: MilestoneFacts, targets: GoalTargets): RaceEstimate | null {
-  const { best5kSeconds, compromisedKmMeanSec, seventyFiveSimulationDone } = facts
-  if (best5kSeconds === null || compromisedKmMeanSec === null || !seventyFiveSimulationDone) return null
+  const { best5kSeconds, compromisedKmMeanSec, compromisedKmCount, seventyFiveSimulationDone } = facts
+  if (
+    best5kSeconds === null
+    || compromisedKmMeanSec === null
+    || compromisedKmCount < COMPROMISED_KM_REQUIRED_COUNT
+    || !seventyFiveSimulationDone
+  ) return null
 
   const stationAndRoxzoneSec = targets.targetSeconds - targets.runBudgetSec
   const projectedSeconds = compromisedKmMeanSec * RACE_RUN_KM + stationAndRoxzoneSec
