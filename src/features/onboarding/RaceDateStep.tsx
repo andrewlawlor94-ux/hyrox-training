@@ -4,6 +4,10 @@ import type { AnchorResult, AnchorWarning } from '@/domain/planGeneration/anchor
 
 interface RaceDateStepProps {
   raceDate: string
+  /** Floor for the native picker. `anchorPlan` still handles a past date (it
+   * warns and produces a usable single week), but stopping the mistake at the
+   * picker is better than explaining it afterwards. */
+  today: string
   onChange: (value: string) => void
   anchor: AnchorResult | null
   error: string | null
@@ -15,7 +19,7 @@ interface RaceDateStepProps {
  * a deferred start) is informational, not a warning. */
 const WARNING_KINDS = new Set<AnchorWarning>(['shortPlan', 'raceInPast'])
 
-export const RaceDateStep: FC<RaceDateStepProps> = ({ raceDate, onChange, anchor, error, onContinue }) => {
+export const RaceDateStep: FC<RaceDateStepProps> = ({ raceDate, today, onChange, anchor, error, onContinue }) => {
   const isWarning = anchor !== null && anchor.warnings.some((warning) => WARNING_KINDS.has(warning))
   const showsDeferredDate = anchor !== null && anchor.warnings.includes('startDeferred') && anchor.deferredStartDate !== null
 
@@ -33,6 +37,7 @@ export const RaceDateStep: FC<RaceDateStepProps> = ({ raceDate, onChange, anchor
           id="onboarding-race-date"
           type="date"
           className="onboarding-field__input"
+          min={today}
           value={raceDate}
           onChange={(event: ChangeEvent<HTMLInputElement>) => onChange(event.target.value)}
         />

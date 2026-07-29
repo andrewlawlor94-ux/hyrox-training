@@ -28,11 +28,17 @@ export type ImportResult =
  *    (`id: 'pre-import'`) — the last chance to recover today's data if the
  *    import turns out to be a mistake.
  * 2. Inside one Dexie transaction: clear every `BACKUP_TABLES` table and
- *    `bulkPut` the imported rows, then bump `settings.schemaVersion` to the
- *    current `SCHEMA_VERSION` (an older imported backup's data is thereby
- *    migrated forward; `settings.lastBackupAt`, which lives on the same row,
- *    passes through untouched because it belongs to the imported file, not
- *    to this import).
+ *    `bulkPut` the imported rows, then set `settings.schemaVersion` to the
+ *    current `SCHEMA_VERSION`. That stamp is only honest because
+ *    `validateBackup` has already refused any schema this build cannot
+ *    account for — newer (`futureSchema`) and un-upgradable older
+ *    (`unmigratableSchema`) files never reach here, so the rows just written
+ *    genuinely are at `SCHEMA_VERSION`. This comment previously claimed an
+ *    older backup was "thereby migrated forward", which was false: Dexie's
+ *    version chain upgrades a database it OPENS, and never touches rows
+ *    bulk-put into an already-current one. (`settings.lastBackupAt`, on the
+ *    same row, passes through untouched — it belongs to the imported file,
+ *    not to this import.)
  *
  * `safetyBackups` is deliberately outside `BACKUP_TABLES` (see that
  * constant's doc comment), so the snapshot this function just wrote in step

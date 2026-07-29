@@ -1,5 +1,5 @@
 import type { ISOInstant } from '@/domain/types'
-import { BACKUP_FORMAT, BACKUP_TABLES, REFERENTIAL_CHECKS, SUPPORTED_SCHEMA_VERSION } from './constants'
+import { BACKUP_FORMAT, BACKUP_TABLES, MIGRATABLE_FROM_SCHEMA_VERSIONS, REFERENTIAL_CHECKS, SUPPORTED_SCHEMA_VERSION } from './constants'
 
 export interface BackupFile {
   format: typeof BACKUP_FORMAT
@@ -14,6 +14,7 @@ export type ValidationFailure =
   | { kind: 'notJson'; message: string }
   | { kind: 'wrongFormat'; message: string }
   | { kind: 'futureSchema'; message: string; found: number; supported: number }
+  | { kind: 'unmigratableSchema'; message: string; found: number; supported: number }
   | { kind: 'missingTable'; message: string; table: string }
   | { kind: 'countMismatch'; message: string; table: string }
   | { kind: 'brokenReference'; message: string; table: string; field: string }
@@ -49,7 +50,8 @@ function fail(failure: ValidationFailure): ValidationResult {
 /**
  * Pure, Dexie-free validation of a raw backup file string. Never throws —
  * every way the input can be malformed (unparsable JSON, the wrong shape,
- * a too-new schema, a missing/miscounted table, a dangling foreign key)
+ * a too-new schema, an un-upgradable older schema, a missing/miscounted table,
+ * a dangling foreign key)
  * returns a `ValidationFailure` carrying a human-readable `message` instead.
  *
  * Order matters for which single failure is reported first when a file has
@@ -79,6 +81,27 @@ export function validateBackup(raw: string): ValidationResult {
     return fail({
       kind: 'futureSchema',
       message: `This backup was made by a newer version of the app (schema ${String(file.schemaVersion)}) than this build supports (schema ${String(SUPPORTED_SCHEMA_VERSION)}). Update the app before importing this file.`,
+      found: file.schemaVersion,
+      supported: SUPPORTED_SCHEMA_VERSION,
+    })
+  }
+
+  // An OLDER schema was previously accepted silently, and `importBackup` then
+  // stamped `settings.schemaVersion` as current — declaring old-shaped rows
+  // migrated when nothing had migrated them. Dexie's version chain only
+  // upgrades a database it opens; it never touches rows bulk-put into an
+  // already-current one. Refusing is the right failure: this app's one
+  // non-negotiable is not corrupting training history, and a refusal is
+  // recoverable where a mis-stamped import is not.
+  //
+  // MIGRATABLE_FROM_SCHEMA_VERSIONS is empty because there has only ever been
+  // schema 1. Whoever ships schema 2 must write the data migration and add 1
+  // to that list; until they do, this branch makes the omission a loud,
+  // immediate refusal instead of silent corruption.
+  if (file.schemaVersion < SUPPORTED_SCHEMA_VERSION && !MIGRATABLE_FROM_SCHEMA_VERSIONS.includes(file.schemaVersion)) {
+    return fail({
+      kind: 'unmigratableSchema',
+      message: `This backup uses an older data format (schema ${String(file.schemaVersion)}) that this build cannot upgrade to schema ${String(SUPPORTED_SCHEMA_VERSION)}. Nothing was changed.`,
       found: file.schemaVersion,
       supported: SUPPORTED_SCHEMA_VERSION,
     })

@@ -10,6 +10,7 @@ import { ImportConfirmSheet } from '@/features/backup/ImportConfirmSheet'
 import { SafetySnapshotPanel } from '@/features/backup/SafetySnapshotPanel'
 import { useImportBackup } from '@/features/backup/useImportBackup'
 import { useToday } from '@/hooks/useToday'
+import { downloadJson } from '@/features/backup/downloadJson'
 
 /** No build-time version injection exists in this project yet (see
  * vite.config.ts) — kept in sync with package.json's "version" by hand. */
@@ -30,16 +31,6 @@ function storageStatusText(status: StorageStatus): string {
   if (status === 'denied') return 'Not granted'
   if (status === 'unsupported') return 'Not supported on this device'
   return 'Checking…'
-}
-
-function triggerDownload(json: string): void {
-  const blob = new Blob([json], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = EXPORT_FILENAME
-  link.click()
-  URL.revokeObjectURL(url)
 }
 
 function logAndIgnore(context: string) {
@@ -80,7 +71,7 @@ export const BackupSettings: FC<BackupSettingsProps> = ({ settings }) => {
   async function handleExport(): Promise<void> {
     const now = new Date().toISOString()
     const { json } = await exportBackup(now, APP_VERSION)
-    triggerDownload(json)
+    downloadJson(json, EXPORT_FILENAME)
     await updateSettings({ lastBackupAt: now })
   }
 

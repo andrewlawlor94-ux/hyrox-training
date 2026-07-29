@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BACKUP_FORMAT, BACKUP_TABLES, SUPPORTED_SCHEMA_VERSION } from '../constants'
+import { BACKUP_FORMAT, BACKUP_TABLES, MIGRATABLE_FROM_SCHEMA_VERSIONS, SUPPORTED_SCHEMA_VERSION } from '../constants'
 import { validateBackup } from '../validate'
 import type { BackupFile } from '../validate'
 
@@ -83,9 +83,39 @@ describe('validateBackup', () => {
     }
   })
 
-  it('accepts a schemaVersion less than SUPPORTED_SCHEMA_VERSION (older backups migrate forward)', () => {
-    const file = emptyFile({ schemaVersion: 0 })
+  // DELIBERATE BEHAVIOUR CHANGE. This previously asserted that an older
+  // schemaVersion was accepted, on the stated grounds that "older backups
+  // migrate forward". They did not: `importBackup` stamped
+  // `settings.schemaVersion` as current, and Dexie's version chain only
+  // upgrades a database it OPENS — it never touches rows bulk-put into an
+  // already-current one. So an older file was accepted and then declared
+  // migrated without anything migrating it. Refusing is the correct failure
+  // here: a refusal is recoverable, a mis-stamped import is not.
+  it('rejects an older schemaVersion this build cannot upgrade from, as unmigratableSchema', () => {
+    const older = SUPPORTED_SCHEMA_VERSION - 1
+    const file = emptyFile({ schemaVersion: older })
     const result = validateBackup(raw(file))
+    expect(result.ok).toBe(false)
+    if (!result.ok && result.failure.kind === 'unmigratableSchema') {
+      expect(result.failure.found).toBe(older)
+      expect(result.failure.supported).toBe(SUPPORTED_SCHEMA_VERSION)
+      expect(result.failure.message).toMatch(/Nothing was changed/)
+    } else {
+      throw new Error('expected unmigratableSchema failure')
+    }
+  })
+
+  it('gates that refusal on MIGRATABLE_FROM_SCHEMA_VERSIONS, which is currently empty', () => {
+    // Documents the escape hatch, so the day schema 2 ships the author has to
+    // add `1` to MIGRATABLE_FROM_SCHEMA_VERSIONS (plus the data migration)
+    // rather than rediscover why old files are refused. Asserting the list is
+    // empty is the point: the refusal above is a consequence of that emptiness,
+    // not a blanket ban on older files.
+    expect(MIGRATABLE_FROM_SCHEMA_VERSIONS).toEqual([])
+  })
+
+  it('accepts a file at exactly SUPPORTED_SCHEMA_VERSION', () => {
+    const result = validateBackup(raw(emptyFile({ schemaVersion: SUPPORTED_SCHEMA_VERSION })))
     expect(result.ok).toBe(true)
   })
 

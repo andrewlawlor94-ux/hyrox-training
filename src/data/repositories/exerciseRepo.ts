@@ -83,6 +83,13 @@ export async function exerciseHistory(exerciseId: string): Promise<SessionPerfor
       if (s.weight === undefined || s.reps === undefined || s.unit === undefined) continue
       setPerfs.push({ weight: s.weight, reps: s.reps, unit: s.unit, ...(s.rir !== undefined ? { rir: s.rir } : {}) })
     }
+    // A session whose every set is missing weight/reps/unit contributes nothing
+    // measurable, and emitting it as `sets: []` is worse than omitting it: the
+    // recommendation engine reads it as "the athlete trained and logged
+    // nothing", which is how a completed session can produce a spurious "you
+    // did not complete all prescribed reps last time". Absent history and empty
+    // history are different facts; only the first one is true here.
+    if (setPerfs.length === 0) continue
     sessions.push({ date: first.completedAt.slice(0, ISO_DATE_LENGTH), sets: setPerfs })
   }
 

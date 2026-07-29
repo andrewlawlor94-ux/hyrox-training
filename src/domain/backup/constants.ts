@@ -21,6 +21,15 @@ export const BACKUP_FORMAT = 'hyrox-training-backup'
 export const SUPPORTED_SCHEMA_VERSION = 1
 
 /**
+ * Older schema versions this build can actually upgrade an imported backup
+ * from. Empty because schema 1 is the only one that has ever existed, so there
+ * is nothing older to upgrade — NOT because older files are assumed
+ * compatible. `validateBackup` refuses anything older that is absent here, so
+ * whoever ships schema 2 has to write the data migration and add `1` to this
+ * list rather than have old rows silently stamped as current. */
+export const MIGRATABLE_FROM_SCHEMA_VERSIONS: readonly number[] = []
+
+/**
  * Every table that is part of the portable backup — exported, validated,
  * and restored as one unit. Mirrors the keys of `STORES_V1` in
  * `src/data/schema.ts` (same manual-sync reasoning as

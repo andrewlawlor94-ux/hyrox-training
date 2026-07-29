@@ -119,6 +119,39 @@ describe('exerciseRepo', () => {
       expect(history[0]?.sets[0]?.weight).toBe(175)
     })
 
+    it('omits a session entirely when none of its completed sets recorded a weight/reps/unit', async () => {
+      // The one-tap flow used to persist `isCompleted` without the values, so
+      // rows like this genuinely exist in real databases. Emitting them as
+      // `sets: []` is worse than omitting them: the recommendation engine reads
+      // an empty session as "trained and logged nothing", which is one way a
+      // completed session produced a spurious "you did not complete all
+      // prescribed reps last time". Absent history and empty history are
+      // different facts; only the first is true here.
+      const ex = await createExercise(baseExerciseInput(), NOW)
+      await db.strengthSets.bulkAdd([
+        {
+          id: 'set_valueless_1', instanceId: 'wi_empty', instancePrescriptionId: 'ip_1', exerciseId: ex.id, setIndex: 0,
+          isCompleted: true, completedAt: '2026-07-20T09:00:00.000Z', isWarmup: false,
+        },
+        {
+          id: 'set_valueless_2', instanceId: 'wi_empty', instancePrescriptionId: 'ip_1', exerciseId: ex.id, setIndex: 1,
+          isCompleted: true, completedAt: '2026-07-20T09:05:00.000Z', isWarmup: false,
+        },
+        // A real session on a later date, which must still come through.
+        {
+          id: 'set_real', instanceId: 'wi_real', instancePrescriptionId: 'ip_2', exerciseId: ex.id, setIndex: 0,
+          weight: 175, unit: 'lb', reps: 5, isCompleted: true, completedAt: '2026-07-27T09:00:00.000Z', isWarmup: false,
+        },
+      ])
+
+      const history = await exerciseHistory(ex.id)
+      expect(history).toHaveLength(1)
+      expect(history[0]?.date).toBe('2026-07-27')
+      expect(history[0]?.sets).toHaveLength(1)
+      // Belt and braces: no session anywhere in the result is empty.
+      expect(history.filter((session) => session.sets.length === 0)).toEqual([])
+    })
+
     it('excludes sets that are not completed', async () => {
       const ex = await createExercise(baseExerciseInput(), NOW)
       await db.strengthSets.add({

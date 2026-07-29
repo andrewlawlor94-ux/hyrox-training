@@ -3,6 +3,7 @@ import type { FC } from 'react'
 import { Button } from '@/components'
 import { exportRawSnapshot } from '@/data/db'
 import type { DbFailureKind } from '@/data/errors'
+import { downloadJson } from '@/features/backup/downloadJson'
 
 const EXPORT_FILENAME = 'hyrox-training-export.json'
 
@@ -33,16 +34,6 @@ const COPY: Record<DbFailureKind, Copy> = {
   },
 }
 
-function triggerDownload(json: string): void {
-  const blob = new Blob([json], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = EXPORT_FILENAME
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
 /**
  * Rendered by `BootGate` whenever `openDb()` fails, instead of a blank
  * screen. Copy is specific to `kind`; Retry re-runs the boot sequence;
@@ -59,7 +50,7 @@ export const DbErrorScreen: FC<{ kind: DbFailureKind; onRetry: () => void }> = (
     setExportError(null)
     try {
       const snapshot = await exportRawSnapshot()
-      triggerDownload(JSON.stringify(snapshot))
+      downloadJson(JSON.stringify(snapshot), EXPORT_FILENAME)
     } catch {
       setExportError('Export failed. Free up storage or close other tabs, then try again.')
     }

@@ -189,6 +189,10 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .rest-timer-bar__label { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rest-timer-bar__countdown { margin: 0; font-size: var(--font-size-xl); font-weight: 700; font-variant-numeric: tabular-nums; }
 .rest-timer-bar__controls { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
+/* Expired reads as finished, not as an active timer stuck at 0:00. Tone is
+   always paired with the "Rest complete" text, never colour alone. */
+.rest-timer-bar--expired .rest-timer-bar__label { color: var(--green); font-weight: 600; }
+.rest-timer-bar--expired .rest-timer-bar__countdown { color: var(--text-muted); }
 
 /* ---------- UpdatePrompt (fixed banner, top of viewport) ---------- */
 .update-prompt {

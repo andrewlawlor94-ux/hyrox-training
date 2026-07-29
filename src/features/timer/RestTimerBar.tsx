@@ -8,6 +8,15 @@ import { useRestTimer } from './useRestTimer'
 
 /** The fixed +/-30s step every adjust control applies. */
 const ADJUST_STEP_SEC = 30
+/**
+ * How long an expired timer stays on screen before clearing itself. Without
+ * this the bar sat at 0:00 across every screen, forever, until the athlete
+ * tapped Skip — a permanent band on a phone after every single set, and on a
+ * reopened app a stale 0:00 from a session that ended hours ago. Long enough to
+ * notice and hit "+30s" for a bit more rest; short enough not to litter.
+ */
+const EXPIRED_LINGER_SEC = 30
+const MS_PER_SEC = 1000
 
 /**
  * Persistent rest-timer bar (§12). Absent entirely when no timer row exists
@@ -25,36 +34,57 @@ export const RestTimerBar: FC = () => {
   const settings = useSettings()
   const firedForEndsAt = useRef<string | undefined>(undefined)
 
+  const isExpired = state !== undefined && !state.isPaused && remainingSec === 0
+
   useEffect(() => {
     if (state === undefined) {
       firedForEndsAt.current = undefined
       return
     }
-    if (state.isPaused || remainingSec > 0 || settings === undefined) return
+    if (!isExpired || settings === undefined) return
     if (firedForEndsAt.current === state.endsAt) return
     firedForEndsAt.current = state.endsAt
     playFeedback(settings)
-  }, [state, remainingSec, settings])
+  }, [state, isExpired, settings])
+
+  // Clears itself once the rest has been over for `EXPIRED_LINGER_SEC`.
+  // Measured from the stored `endsAt`, not from a timer this component starts,
+  // so it holds across navigation, a screen lock, and a reopened app — a timer
+  // that expired an hour ago is gone on the first render rather than lingering
+  // for another 30s. `useRestTimer`'s 250ms tick keeps re-running this effect
+  // while the row exists, so no separate timeout is needed.
+  useEffect(() => {
+    if (state?.endsAt === undefined || !isExpired) return
+    const secondsSinceExpiry = (Date.now() - new Date(state.endsAt).getTime()) / MS_PER_SEC
+    if (secondsSinceExpiry >= EXPIRED_LINGER_SEC) void skip()
+  }, [state, isExpired, remainingSec, skip])
 
   if (state === undefined) return null
 
   return (
-    <div className="rest-timer-bar" role="group" aria-label="Rest timer">
+    <div className={isExpired ? 'rest-timer-bar rest-timer-bar--expired' : 'rest-timer-bar'} role="group" aria-label="Rest timer">
       <div className="rest-timer-bar__info">
-        <p className="rest-timer-bar__label">{state.label}</p>
+        <p className="rest-timer-bar__label">{isExpired ? 'Rest complete' : state.label}</p>
         <p className="rest-timer-bar__countdown" aria-live="polite">{formatDuration(remainingSec)}</p>
       </div>
       <div className="rest-timer-bar__controls">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => { void (isRunning ? pause() : resume()) }}
-        >
-          {isRunning ? 'Pause' : 'Resume'}
-        </Button>
-        <Button variant="quiet" size="sm" onClick={() => { void add(-ADJUST_STEP_SEC) }}>-30s</Button>
+        {/* Pause and -30s are meaningless once the rest is over — there is
+            nothing left to pause or shorten. "+30s" survives because "I need a
+            bit more" is a real thing to want at 0:00. */}
+        {!isExpired && (
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => { void (isRunning ? pause() : resume()) }}
+            >
+              {isRunning ? 'Pause' : 'Resume'}
+            </Button>
+            <Button variant="quiet" size="sm" onClick={() => { void add(-ADJUST_STEP_SEC) }}>-30s</Button>
+          </>
+        )}
         <Button variant="quiet" size="sm" onClick={() => { void add(ADJUST_STEP_SEC) }}>+30s</Button>
-        <Button variant="quiet" size="sm" onClick={() => { void skip() }}>Skip</Button>
+        <Button variant="quiet" size="sm" onClick={() => { void skip() }}>{isExpired ? 'Done' : 'Skip'}</Button>
       </div>
     </div>
   )

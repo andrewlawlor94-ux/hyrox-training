@@ -9,6 +9,10 @@ import { RestTimerBar } from '../RestTimerBar'
 const T0 = '2026-07-27T10:00:00.000Z'
 const T0_PLUS_30S = '2026-07-27T10:00:30.000Z'
 const T0_PLUS_95S = '2026-07-27T10:01:35.000Z'
+/* A 60s timer started at T0 expires at T0+60s, so these are 10s and 60s past
+ * expiry — either side of the 30s expired-linger window. */
+const T0_PLUS_70S = '2026-07-27T10:01:10.000Z'
+const T0_PLUS_120S = '2026-07-27T10:02:00.000Z'
 const REAL_WAIT_TIMEOUT_MS = 2000
 
 /** jsdom doesn't resolve CSS custom properties in getComputedStyle — same
@@ -192,6 +196,65 @@ describe('RestTimerBar', () => {
 
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(window.location.pathname).toBe('/')
+  })
+
+  // Before this, an expired timer sat at 0:00 across every screen forever,
+  // with a Pause button, until the athlete tapped Skip.
+  describe('expiry', () => {
+    it('reads as finished rather than as a stuck timer, and drops the controls that no longer mean anything', async () => {
+      await startTimer({ label: 'Back squat', totalSec: 60, now: T0 })
+      render(<RestTimerBar />)
+      await screen.findByText('1:00')
+
+      vi.setSystemTime(new Date(T0_PLUS_70S))
+      await waitFor(() => expect(screen.getByText('Rest complete')).toBeInTheDocument(), { timeout: REAL_WAIT_TIMEOUT_MS })
+
+      expect(screen.getByText('0:00')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /pause/i })).toBeNull()
+      expect(screen.queryByRole('button', { name: '-30s' })).toBeNull()
+      // "+30s" stays: needing a bit more rest at 0:00 is a real thing to want.
+      expect(screen.getByRole('button', { name: '+30s' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument()
+
+      // Still inside the linger window, so the row is deliberately still there.
+      expect(await getTimerState()).toBeDefined()
+    })
+
+    it('clears itself once the rest has been over for the linger window', async () => {
+      await startTimer({ label: 'Back squat', totalSec: 60, now: T0 })
+      const { container } = render(<RestTimerBar />)
+      await screen.findByText('1:00')
+
+      vi.setSystemTime(new Date(T0_PLUS_120S))
+      await waitFor(async () => { expect(await getTimerState()).toBeUndefined() }, { timeout: REAL_WAIT_TIMEOUT_MS })
+      await waitFor(() => { expect(container).toBeEmptyDOMElement() }, { timeout: REAL_WAIT_TIMEOUT_MS })
+    })
+
+    it('a timer that expired long before this mount is gone immediately, not lingering another 30s', async () => {
+      // Measured from the stored `endsAt`, never from a countdown this
+      // component starts — which is what makes a reopened app show no stale
+      // 0:00 from a session that ended hours ago.
+      await startTimer({ label: 'Back squat', totalSec: 60, now: T0 })
+      vi.setSystemTime(new Date(T0_PLUS_120S))
+
+      const { container } = render(<RestTimerBar />)
+      await waitFor(async () => { expect(await getTimerState()).toBeUndefined() }, { timeout: REAL_WAIT_TIMEOUT_MS })
+      expect(container).toBeEmptyDOMElement()
+    })
+
+    it('a PAUSED timer never expires or self-clears, however long it sits', async () => {
+      await startTimer({ label: 'Back squat', totalSec: 60, now: T0 })
+      render(<RestTimerBar />)
+      await screen.findByText('1:00')
+      await userEvent.click(screen.getByRole('button', { name: /pause/i }))
+
+      vi.setSystemTime(new Date(T0_PLUS_120S))
+      await act(async () => { await new Promise((resolve) => { setTimeout(resolve, 400) }) })
+
+      expect(await getTimerState()).toBeDefined()
+      expect(screen.getByText('Back squat')).toBeInTheDocument()
+      expect(screen.queryByText('Rest complete')).toBeNull()
+    })
   })
 
   it('does not read through a write-on-read settings call from inside the live query', async () => {

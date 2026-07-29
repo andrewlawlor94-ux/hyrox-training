@@ -13,6 +13,9 @@ const NARROWEST_IPHONE = { width: 375, height: 667 }
 const MIN_EDGE_PADDING_PX = 16
 /** Sub-pixel slack: a 44px target can compute to 43.99 after layout rounding. */
 const SLACK_PX = 0.5
+/** Far enough out that `anchorPlan` reports neither `shortPlan` nor
+ * `startDeferred` — same value `completeOnboarding` defaults to. */
+const RACE_DATE_OFFSET_WEEKS = 26
 
 interface UndersizedControl { selector: string; width: number; height: number }
 
@@ -103,7 +106,7 @@ test('the onboarding wizard is inset from both bezels and fully tappable at 375p
 
   // Same three checks on the two remaining steps — the wizard's later steps are
   // separate renders of `.onboarding-step`, not the same DOM re-labelled.
-  await page.getByLabel('Race date').fill(isoDateWeeksFromNow(26))
+  await page.getByLabel('Race date').fill(isoDateWeeksFromNow(RACE_DATE_OFFSET_WEEKS))
   await page.getByRole('button', { name: 'Continue' }).click()
   await expect(page.getByRole('heading', { name: 'Profile' })).toBeVisible()
   expect(await undersizedTapTargets(page)).toEqual([])

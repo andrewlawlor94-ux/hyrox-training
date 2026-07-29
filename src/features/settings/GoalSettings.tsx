@@ -104,6 +104,10 @@ export const GoalSettings: FC = () => {
           id="settings-race-date"
           type="date"
           className="onboarding-field__input"
+          // Floor the picker at today: a past race date is handled (anchorPlan
+          // warns, `reanchorToRaceDate` reports "moved closer") but there is no
+          // reason to let the control offer it in the first place.
+          min={today}
           value={goal.raceDate}
           onChange={(event) => { handleRaceDateChange(event, goal) }}
         />

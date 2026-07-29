@@ -51,6 +51,7 @@ export const OnboardingScreen: FC = () => {
       <>
         <RaceDateStep
           raceDate={fields.raceDate}
+          today={today}
           onChange={(value) => onboarding.setField('raceDate', value)}
           anchor={onboarding.anchor}
           error={onboarding.raceDateError}

@@ -4,18 +4,9 @@ import { Button } from '@/components'
 import { getSafetyBackup } from '@/data/repositories'
 import { ImportConfirmSheet } from './ImportConfirmSheet'
 import { useImportBackup } from './useImportBackup'
+import { downloadJson } from './downloadJson'
 
 const SNAPSHOT_FILENAME = 'hyrox-training-pre-import-snapshot.json'
-
-function triggerDownload(json: string, filename: string): void {
-  const blob = new Blob([json], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  URL.revokeObjectURL(url)
-}
 
 /**
  * Surfaces `importBackup`'s pre-import safety snapshot (C3): before this, the
@@ -51,7 +42,7 @@ export const SafetySnapshotPanel: FC = () => {
             {`Saved automatically before the last import, on ${new Date(snapshot.at).toLocaleString()}.`}
           </p>
           <div className="settings-screen__actions">
-            <Button variant="secondary" onClick={() => { triggerDownload(snapshot.json, SNAPSHOT_FILENAME) }}>
+            <Button variant="secondary" onClick={() => { downloadJson(snapshot.json, SNAPSHOT_FILENAME) }}>
               Export snapshot
             </Button>
             <Button variant="secondary" onClick={() => { beginImportFromRaw(snapshot.json) }}>
