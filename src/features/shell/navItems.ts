@@ -7,16 +7,17 @@ export interface NavItem {
 }
 
 /**
- * Data-driven so Progress and Plan are a one-line addition once those
- * screens exist. Deliberate deviation from the brief's four destinations:
- * shipping a tab with no screen behind it would be exactly the
- * placeholder/dead-link pattern the Global Constraints forbid, so only
- * Home and Settings ship today — see the Task 18 report. Kept in its own
- * module (rather than alongside `BottomNav`) so that component file only
- * exports a component, which is what `react-refresh/only-export-components`
- * wants for reliable fast refresh.
+ * Data-driven so Plan is a one-line addition once that screen exists.
+ * Progress joined Home/Settings once Tasks 25/26 shipped the Strength and
+ * Running views behind it — before that, shipping the tab would have been
+ * exactly the placeholder/dead-link pattern the Global Constraints forbid
+ * (see the Task 18 report). Plan is still that screen-less tab, so it stays
+ * out. Kept in its own module (rather than alongside `BottomNav`) so that
+ * component file only exports a component, which is what
+ * `react-refresh/only-export-components` wants for reliable fast refresh.
  */
 export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/', label: 'Home', end: true },
+  { to: '/progress', label: 'Progress' },
   { to: '/settings', label: 'Settings' },
 ]
