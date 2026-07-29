@@ -388,6 +388,9 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .progress-screen { display: flex; flex-direction: column; gap: var(--space-4); }
 .progress-screen__heading { font-size: var(--font-size-2xl); margin: 0; }
 .progress-screen__loading { padding: var(--space-5); color: var(--text-muted); }
+/* Suspense fallback while the lazy-loaded Progress route chunk downloads —
+ * same treatment as every other screen's own loading state. */
+.route-loading { padding: var(--space-5); color: var(--text-muted); }
 
 .strength-progress, .running-progress { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .strength-progress__picker { display: flex; flex-direction: column; gap: var(--space-1); }

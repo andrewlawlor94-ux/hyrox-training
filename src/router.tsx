@@ -1,4 +1,5 @@
 import type { FC } from 'react'
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { ErrorBoundary } from '@/components'
 import { AppShell } from '@/features/shell/AppShell'
@@ -6,7 +7,19 @@ import { HomeScreen } from '@/features/home/HomeScreen'
 import { SettingsScreen } from '@/features/settings/SettingsScreen'
 import { OnboardingScreen } from '@/features/onboarding/OnboardingScreen'
 import { WorkoutScreen } from '@/features/workout/WorkoutScreen'
-import { ProgressScreen } from '@/features/progress/ProgressScreen'
+
+/**
+ * Progress is the app's only Recharts consumer, and Recharts is most of the
+ * entry bundle's weight (§ code-split follow-up) — an athlete who never
+ * opens Progress should never pay for it on first paint. `lazy` moves the
+ * whole screen (and everything it imports, including Recharts) into its own
+ * chunk, fetched only when `/progress` is actually visited; the route's own
+ * `ErrorBoundary` below already catches render errors, so a failed chunk
+ * fetch (e.g. offline with an uncached chunk) surfaces the same "Something
+ * went wrong" fallback instead of a blank screen.
+ */
+const ProgressScreen = lazy(() =>
+  import('@/features/progress/ProgressScreen').then((module) => ({ default: module.ProgressScreen })))
 
 /**
  * Home, Settings, Workout logging, and Progress (all four laid out inside
@@ -70,7 +83,9 @@ export const AppRoutes: FC = () => (
         path="/progress"
         element={(
           <ErrorBoundary>
-            <ProgressScreen />
+            <Suspense fallback={<p className="route-loading">Loading…</p>}>
+              <ProgressScreen />
+            </Suspense>
           </ErrorBoundary>
         )}
       />
