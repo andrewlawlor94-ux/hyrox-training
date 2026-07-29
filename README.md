@@ -160,11 +160,47 @@ npm run test:run
 928 tests across 81 files (unit, component, and filesystem-scanning tests), run once and
 exit. `npm run test` runs the same suite in Vitest's interactive watch mode.
 
-There is no end-to-end test suite yet. An `npm run e2e` script exists in `package.json`
-(`playwright test`) and `@playwright/test` is a listed dependency, but no Playwright specs
-have been written and Playwright's browser binaries are not installed — running `npm run e2e`
-today will fail with a missing-browser error, not run a meaningful suite. Treat e2e coverage
-as **not yet built**, not merely "currently red."
+### End-to-end tests
+
+```powershell
+npx playwright install chromium   # one-time browser download
+npm run e2e
+```
+
+Three Playwright specs under `e2e/` drive a real Chromium browser, at a real iPhone 13
+viewport, against a real production build (`playwright.config.ts`'s `webServer` runs
+`npm run build` then `vite preview` on port 4173, under the same `/hyrox-training/` subpath
+the GitHub Pages deploy uses — never the dev server):
+
+- `workoutLogging.spec.ts` — onboarding through a fresh, empty IndexedDB; every exercise
+  expanded with no tap required; logging a set with one tap and no field edits, then
+  confirming the **database row** (not just the UI) carries the prefilled weight/reps; a
+  typed weight and the rest timer's countdown both surviving a real page reload; finishing
+  as "Partially completed" and confirming Home never reports it as completed; no horizontal
+  scroll at any point.
+- `backupRestore.spec.ts` — log a set, export a real downloaded backup file, reset all data
+  through the confirmation flow, and restore via onboarding's own pre-onboarding "Restore it
+  instead" entry point (the path a fresh phone actually uses) — then confirm the logged set,
+  its weight/reps, and the completed instance's `frozen` flag all come back identical.
+  A deliberately corrupted file is also imported, asserting both a specific error message and
+  that the restored data is untouched.
+- `offlineInstall.spec.ts` — the manifest is served with a correct subpath-carrying
+  `start_url`/`scope` and every icon resolves; then, fully offline
+  (`context.setOffline(true)`), Home still renders from the service worker's cache, tab
+  navigation keeps working, and a hard reload on a deep, lazily-loaded route (`/plan`) still
+  renders — the `navigateFallback` path a plain `fetch()` can't exercise.
+
+This is deliberately the layer the 928 Vitest/RTL tests cannot reach: a real IndexedDB
+starting genuinely empty, a real service worker, and real elapsed wall-clock time — the
+combination that has caught every serious defect on this project so far (a blank first
+launch from a read-that-writes on an empty database, a one-tap set that logged completion but
+not weight/reps, empty Base-week prescriptions, and sub-44px tap targets forcing real
+horizontal scroll).
+
+`npm run e2e` is not currently wired into `.github/workflows/deploy.yml` — it would add a
+~200MB browser download to the deploy path, which felt like a decision worth a deliberate,
+separate choice rather than a silent addition. Recommended if/when CI minutes and cache
+strategy for the browser download are worked out.
 
 ## Production build
 

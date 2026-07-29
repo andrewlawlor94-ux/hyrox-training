@@ -1,18 +1,22 @@
 {
-  // Not referenced from tsconfig.json's "references" array (yet): its
-  // `include` below matches zero files until a later task creates
-  // scripts/generate-icons.mjs or playwright.config.ts. TypeScript hard-errors
-  // (TS18003) on a referenced project with zero matched inputs, which would
-  // break `npm run typecheck`/`npm run build` (both run `tsc -b`) today.
-  //
-  // This omission is enforced, not just noted: src/__tests__/projectConfig.test.ts
-  // asserts that once either of those files exists on disk, tsconfig.json's
-  // "references" array must include { "path": "./tsconfig.node.json" }. That
-  // test is vacuously true right now and starts failing the moment Task 30 or
-  // 32 lands, so restoring the reference here is not optional to remember.
+  // `include` below only matches files that exist once scripts/generate-icons.mjs
+  // (Task 30) and playwright.config.ts / e2e/**/*.ts (Task 32) land — before
+  // that, TypeScript hard-errors (TS18003) on a referenced project with zero
+  // matched input files, which would break `npm run typecheck`/`npm run build`
+  // (both run `tsc -b`). Both files now exist, so tsconfig.json's "references"
+  // array includes { "path": "./tsconfig.node.json" } (restored, not omitted) —
+  // see src/__tests__/projectConfig.test.ts, which asserts that wiring stays in
+  // place once either input exists.
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2023"],
+    // DOM (+ Iterable) is here for e2e/**/*.ts only: Playwright specs run
+    // `page.evaluate(...)` callbacks that reference real browser globals
+    // (`indexedDB`, `document`, `navigator`, `window`) — those callbacks are
+    // still ordinary TypeScript, type-checked against THIS project's lib, even
+    // though they execute inside the browser page rather than this Node
+    // process. scripts/generate-icons.mjs is plain JS (see `allowJs` below) and
+    // unaffected either way.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
@@ -28,5 +32,5 @@
     // its contents aren't type-checked.
     "allowJs": true
   },
-  "include": ["scripts/**/*.mjs", "playwright.config.ts"]
+  "include": ["scripts/**/*.mjs", "playwright.config.ts", "e2e/**/*.ts"]
 }

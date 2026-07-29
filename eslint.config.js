@@ -17,7 +17,12 @@ export default tseslint.config(
     languageOptions: {
       ecmaVersion: 2022,
       globals: globals.browser,
-      parserOptions: { project: ['./tsconfig.app.json'], tsconfigRootDir: import.meta.dirname },
+      // tsconfig.node.json covers playwright.config.ts and e2e/**/*.ts (see
+      // that file's own doc comment) -- without it here too, typescript-eslint
+      // can't find those files in ANY configured project and hard-errors on
+      // every one of them ("file was not found in any of the provided
+      // project(s)").
+      parserOptions: { project: ['./tsconfig.app.json', './tsconfig.node.json'], tsconfigRootDir: import.meta.dirname },
     },
     plugins: { 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
     rules: {
@@ -102,5 +107,8 @@ export default tseslint.config(
       'no-magic-numbers': 'off',
     },
   },
-  { files: ['scripts/**/*.mjs', '*.config.{ts,js}'], languageOptions: { globals: globals.node } },
+  // e2e/**/*.ts runs under Node (the Playwright test runner), not a browser,
+  // so it needs `globals.node` (e.g. `Buffer`) the same way scripts/*.mjs and
+  // the *.config files do.
+  { files: ['scripts/**/*.mjs', '*.config.{ts,js}', 'e2e/**/*.ts'], languageOptions: { globals: globals.node } },
 )
