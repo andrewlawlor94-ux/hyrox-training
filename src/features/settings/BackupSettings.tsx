@@ -1,11 +1,12 @@
-import type { ChangeEvent, FC } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import type { FC } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components'
 import { resetDatabase } from '@/data/db'
 import { restoreSeedPlanPreservingHistory, updateSettings } from '@/data/repositories'
 import type { AppSettings } from '@/data/types'
 import { exportBackup } from '@/data/backup/exportBackup'
-import { importBackup } from '@/data/backup/importBackup'
+import { ImportBackupButton } from '@/features/backup/ImportBackupButton'
+import { useImportBackup } from '@/features/backup/useImportBackup'
 import { useToday } from '@/hooks/useToday'
 
 /** No build-time version injection exists in this project yet (see
@@ -39,18 +40,6 @@ function triggerDownload(json: string): void {
   URL.revokeObjectURL(url)
 }
 
-/** `File.prototype.text()` isn't implemented under jsdom (verified while
- * building this component's tests), so this reads via `FileReader` instead
- * — the same API real browsers support too. */
-function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => { resolve(typeof reader.result === 'string' ? reader.result : '') }
-    reader.onerror = () => { reject(reader.error ?? new Error('Could not read the selected file.')) }
-    reader.readAsText(file)
-  })
-}
-
 function logAndIgnore(context: string) {
   return (err: unknown): void => { console.error(context, err) }
 }
@@ -71,10 +60,9 @@ interface BackupSettingsProps {
 export const BackupSettings: FC<BackupSettingsProps> = ({ settings }) => {
   const today = useToday()
   const [storageStatus, setStorageStatus] = useState<StorageStatus>('checking')
-  const [importMessage, setImportMessage] = useState<string | null>(null)
+  const { message: importMessage, handleFileChange } = useImportBackup()
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null)
   const [confirmText, setConfirmText] = useState('')
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const storage = (navigator as { storage?: StorageManagerLike }).storage
@@ -92,26 +80,6 @@ export const BackupSettings: FC<BackupSettingsProps> = ({ settings }) => {
     const { json } = await exportBackup(now, APP_VERSION)
     triggerDownload(json)
     await updateSettings({ lastBackupAt: now })
-  }
-
-  async function handleImportFile(event: ChangeEvent<HTMLInputElement>): Promise<void> {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    setImportMessage(null)
-    try {
-      const raw = await readFileAsText(file)
-      const result = await importBackup(raw, new Date().toISOString())
-      if (result.ok) {
-        const total = Object.values(result.counts).reduce((sum, count) => sum + count, 0)
-        setImportMessage(`Imported successfully — ${String(total)} record(s) restored.`)
-      } else {
-        setImportMessage(result.failure.message)
-      }
-    } catch (err) {
-      logAndIgnore('Backup import failed unexpectedly')(err)
-      setImportMessage('Import failed unexpectedly. Your existing data was not changed.')
-    }
   }
 
   async function handleRestorePlan(): Promise<void> {
@@ -145,15 +113,7 @@ export const BackupSettings: FC<BackupSettingsProps> = ({ settings }) => {
 
       <div className="settings-screen__actions">
         <Button onClick={() => { void handleExport() }}>Export backup</Button>
-        <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>Import backup</Button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="application/json"
-          aria-label="Import backup"
-          className="visually-hidden"
-          onChange={(event) => { void handleImportFile(event) }}
-        />
+        <ImportBackupButton triggerLabel="Import backup" ariaLabel="Import backup" onFileChange={handleFileChange} />
       </div>
       {importMessage && <p role="status" className="settings-screen__note">{importMessage}</p>}
 
