@@ -35,7 +35,7 @@ export const WorkoutScreen: FC = () => {
       ) : (
         <div className="workout-screen__exercises">
           {data.exercises.map((item) => (
-            <ExerciseCard key={item.prescription.id} item={item} />
+            <ExerciseCard key={item.prescription.id} item={item} frozen={data.instance.frozen} />
           ))}
         </div>
       )}

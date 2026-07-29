@@ -64,15 +64,18 @@ export function structureLineFor(exercise: Exercise, prescription: InstancePresc
 const ACTIVE_TODAY_STATUSES: readonly WorkoutStatus[] = ['upcoming', 'available']
 const DONE_STATUSES: readonly WorkoutStatus[] = ['completed', 'partiallyCompleted']
 
+/** `edit` tracks NOT-frozen: true for `inProgress`/`ACTIVE_TODAY_STATUSES`,
+ * false for `DONE_STATUSES` (always frozen -- see `completeWorkout`), since
+ * editing completed history is the one thing this app must never allow. */
 function actionsFor(status: WorkoutStatus): TodaysWorkoutVM['actions'] {
   if (status === 'inProgress') {
-    return { start: false, continue: true, completedEarlier: false, defer: false, skip: false, edit: false }
+    return { start: false, continue: true, completedEarlier: false, defer: false, skip: false, edit: true }
   }
   if (DONE_STATUSES.includes(status)) {
-    return { start: false, continue: false, completedEarlier: false, defer: false, skip: false, edit: true }
+    return { start: false, continue: false, completedEarlier: false, defer: false, skip: false, edit: false }
   }
   if (ACTIVE_TODAY_STATUSES.includes(status)) {
-    return { start: true, continue: false, completedEarlier: true, defer: true, skip: true, edit: false }
+    return { start: true, continue: false, completedEarlier: true, defer: true, skip: true, edit: true }
   }
   return { start: false, continue: false, completedEarlier: false, defer: false, skip: false, edit: false }
 }

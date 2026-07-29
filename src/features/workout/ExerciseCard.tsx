@@ -1,7 +1,9 @@
 import type { FC } from 'react'
+import { useState } from 'react'
 import { Button, Card } from '@/components'
 import { addSet, removeSet, upsertSet } from '@/data/repositories'
 import { useRestTimer } from '@/features/timer/useRestTimer'
+import { EditPrescriptionSheet } from './EditPrescriptionSheet'
 import { hasUnknownLoad } from './loadPresentation'
 import { RunBlock } from './RunBlock'
 import { SetRow } from './SetRow'
@@ -19,12 +21,17 @@ function logAndIgnore(err: unknown): void {
 
 interface StrengthCardProps {
   item: StrengthExerciseVM
+  /** Hides the Edit control once the owning instance is frozen (completed
+   * history) -- see `EditPrescriptionSheet`'s own doc comment for why this is
+   * never offered rather than offered-then-blocked. */
+  frozen: boolean
 }
 
-const StrengthCard: FC<StrengthCardProps> = ({ item }) => {
+const StrengthCard: FC<StrengthCardProps> = ({ item, frozen }) => {
   const { prescription, exercise, sets, recommendation, targetReps } = item
   const autosave = useAutosave()
   const { start } = useRestTimer()
+  const [editOpen, setEditOpen] = useState(false)
 
   const prefillLoad = recommendation.isOptionalAim && recommendation.previous ? recommendation.previous.load : recommendation.target
   // No prefilled weight at all when the target is unknown (§ fix: "target:
@@ -92,17 +99,30 @@ const StrengthCard: FC<StrengthCardProps> = ({ item }) => {
         {sets.length > 0 && (
           <Button variant="quiet" size="sm" onClick={() => { handleRemoveSet().catch(logAndIgnore) }}>Remove set</Button>
         )}
+        {!frozen && (
+          <Button variant="quiet" size="sm" onClick={() => { setEditOpen(true) }}>Edit</Button>
+        )}
       </div>
       {prescription.notes && <p className="exercise-card__notes">{`Notes: ${prescription.notes}`}</p>}
+      {!frozen && (
+        <EditPrescriptionSheet
+          open={editOpen}
+          instanceId={prescription.instanceId}
+          prescriptionId={prescription.id}
+          onClose={() => { setEditOpen(false) }}
+        />
+      )}
     </Card>
   )
 }
 
 /** Routes each prescribed exercise to its logging block: strength sets,
  * a run (distance/duration/pace/splits — `RunBlock`), or a HYROX station
- * (`StationBlock`, including the sled/wall-ball specifics). */
-export const ExerciseCard: FC<{ item: WorkoutExerciseVM }> = ({ item }) => {
-  if (item.kind === 'strength') return <StrengthCard item={item} />
+ * (`StationBlock`, including the sled/wall-ball specifics). `frozen` only
+ * matters to the strength block -- it's the only one offering an Edit
+ * control (see `StrengthCard`); the run/station blocks are unaffected. */
+export const ExerciseCard: FC<{ item: WorkoutExerciseVM; frozen: boolean }> = ({ item, frozen }) => {
+  if (item.kind === 'strength') return <StrengthCard item={item} frozen={frozen} />
   if (item.kind === 'run') return <RunBlock item={item} />
   return <StationBlock item={item} />
 }

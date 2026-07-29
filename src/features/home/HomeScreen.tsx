@@ -135,7 +135,6 @@ export const HomeScreen: FC = () => {
             onCompletedEarlier={handleCompletedEarlier}
             onDefer={handleDefer}
             onSkip={handleSkip}
-            onEdit={handleStart}
           />
           {homeData.week && <ThisWeekCard vm={homeData.week} />}
           {homeData.goal && <GoalSnapshotCard vm={homeData.goal} />}

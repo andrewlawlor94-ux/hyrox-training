@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { db, resetDatabase } from '@/data/db'
 import {
@@ -107,13 +107,15 @@ describe("Home: today's workout card", () => {
     await renderHome()
     const card = await cardFor(/today.s workout/i)
     expect(within(card).getByRole('button', { name: 'Continue' })).toBeInTheDocument()
+    // Still editable while in progress -- not yet frozen.
+    expect(within(card).getByRole('button', { name: 'Edit' })).toBeInTheDocument()
     expect(within(card).queryByRole('button', { name: 'Start' })).toBeNull()
     expect(within(card).queryByRole('button', { name: 'Completed earlier' })).toBeNull()
     expect(within(card).queryByRole('button', { name: 'Defer' })).toBeNull()
     expect(within(card).queryByRole('button', { name: 'Skip' })).toBeNull()
   })
 
-  it('offers only Edit (no Start/Continue/Completed earlier/Defer/Skip) once a session is completed', async () => {
+  it('offers no actions at all (including no Edit) once every session for today is completed -- completed history is immutable', async () => {
     await seedTestDb()
     await onboard()
     const week1 = await instancesForWeek(1)
@@ -124,12 +126,66 @@ describe("Home: today's workout card", () => {
 
     await renderHome()
     const card = await cardFor(/today.s workout/i)
-    expect(within(card).getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: 'Edit' })).toBeNull()
     expect(within(card).queryByRole('button', { name: 'Start' })).toBeNull()
     expect(within(card).queryByRole('button', { name: 'Continue' })).toBeNull()
     expect(within(card).queryByRole('button', { name: 'Completed earlier' })).toBeNull()
     expect(within(card).queryByRole('button', { name: 'Defer' })).toBeNull()
     expect(within(card).queryByRole('button', { name: 'Skip' })).toBeNull()
+  })
+
+  it('offers Edit for an available session, and Edit opens the edit sheet in place rather than navigating to the workout screen', async () => {
+    await seedTestDb()
+    await onboard()
+    await renderHome()
+    const card = await cardFor(/today.s workout/i)
+
+    await userEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    await screen.findByRole('dialog')
+    // Still on Home -- the mislabelled version of this button navigated to
+    // /workout/:id (Start's own handler); the real fix must not.
+    expect(screen.getByRole('heading', { level: 1, name: /home/i })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 1, name: /week 1/i })).toBeNull()
+  })
+
+  it('applies a "Just this workout" edit made from Home to that exercise\'s own InstancePrescription, leaving a sibling exercise and its template untouched', async () => {
+    await seedTestDb()
+    await onboard()
+    const week1 = await instancesForWeek(1)
+    const today = week1.find((i) => i.scheduledDate === TODAY)
+    if (!today) throw new Error('expected an instance scheduled today')
+
+    const prescriptions = await db.instancePrescriptions.where('instanceId').equals(today.id).toArray()
+    const strengthCandidates = []
+    for (const p of prescriptions) {
+      const exercise = await db.exercises.get(p.exerciseId)
+      if (exercise?.measurementType === 'strengthSets') strengthCandidates.push({ prescription: p, exercise })
+    }
+    if (strengthCandidates.length === 0) throw new Error('expected at least one strength exercise scheduled today')
+    const [target, ...others] = strengthCandidates
+    if (!target) throw new Error('expected a target candidate')
+
+    await renderHome()
+    const card = await cardFor(/today.s workout/i)
+    await userEvent.click(within(card).getByRole('button', { name: 'Edit' }))
+    const dialog = await screen.findByRole('dialog')
+
+    if (strengthCandidates.length > 1) {
+      await userEvent.click(await within(dialog).findByRole('button', { name: new RegExp(target.exercise.name) }))
+    }
+    const restInput = await within(dialog).findByLabelText(/rest/i)
+    fireEvent.change(restInput, { target: { value: '210' } })
+    fireEvent.click(within(dialog).getByLabelText('Just this workout'))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Apply' }))
+    await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
+
+    expect((await db.instancePrescriptions.get(target.prescription.id))?.restSec).toBe(210)
+    if (target.prescription.sourcePrescriptionId) {
+      expect((await db.prescriptions.get(target.prescription.sourcePrescriptionId))?.restSec).toBe(target.prescription.restSec)
+    }
+    for (const other of others) {
+      expect((await db.instancePrescriptions.get(other.prescription.id))?.restSec).toBe(other.prescription.restSec)
+    }
   })
 
   it('renders a real, engine-produced schedule-adjustment explanation verbatim from queueExplanations', async () => {

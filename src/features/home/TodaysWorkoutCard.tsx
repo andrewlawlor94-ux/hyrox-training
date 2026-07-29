@@ -4,6 +4,7 @@ import type { ISODate, Priority } from '@/data/types'
 import { Button, Card, Chip } from '@/components'
 import type { ChipTone } from '@/components'
 import { CompletedEarlierSheet } from '@/features/workout/CompletedEarlierSheet'
+import { EditPrescriptionSheet } from '@/features/workout/EditPrescriptionSheet'
 import type { TodaysWorkoutVM } from './types'
 
 const PRIORITY_TONE: Record<Priority, ChipTone> = { essential: 'accent', important: 'neutral', optional: 'neutral' }
@@ -18,18 +19,23 @@ interface TodaysWorkoutCardProps {
   onCompletedEarlier: (forDate: ISODate) => void
   onDefer: () => void
   onSkip: () => void
-  onEdit: () => void
 }
 
 /**
  * Purely presentational (§Task 24): every field comes from `useHomeData`'s
- * view model, every action is a callback prop. Renders exactly the actions
- * `vm.actions` marks true — never a button with no wired behaviour behind it.
+ * view model, every action is a callback prop -- except Edit, which opens
+ * `EditPrescriptionSheet` right here rather than delegating to a parent
+ * callback. Editing today's prescriptions doesn't navigate anywhere (unlike
+ * Start/Continue, which hand off to the real workout screen), so it owns its
+ * own sheet state the same way the "Completed earlier" flow already does.
+ * Renders exactly the actions `vm.actions` marks true — never a button with
+ * no wired behaviour behind it.
  */
 export const TodaysWorkoutCard: FC<TodaysWorkoutCardProps> = ({
-  vm, today, disabled, onStart, onContinue, onCompletedEarlier, onDefer, onSkip, onEdit,
+  vm, today, disabled, onStart, onContinue, onCompletedEarlier, onDefer, onSkip,
 }) => {
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
 
   function handleConfirmCompletedEarlier(forDate: ISODate): void {
     setSheetOpen(false)
@@ -78,7 +84,9 @@ export const TodaysWorkoutCard: FC<TodaysWorkoutCardProps> = ({
         )}
         {vm.actions.defer && <Button variant="quiet" disabled={disabled} onClick={onDefer}>Defer</Button>}
         {vm.actions.skip && <Button variant="quiet" disabled={disabled} onClick={onSkip}>Skip</Button>}
-        {vm.actions.edit && <Button variant="secondary" disabled={disabled} onClick={onEdit}>Edit</Button>}
+        {vm.actions.edit && (
+          <Button variant="secondary" disabled={disabled} onClick={() => { setEditOpen(true) }}>Edit</Button>
+        )}
       </div>
 
       <CompletedEarlierSheet
@@ -87,6 +95,13 @@ export const TodaysWorkoutCard: FC<TodaysWorkoutCardProps> = ({
         onClose={() => { setSheetOpen(false) }}
         onConfirm={handleConfirmCompletedEarlier}
       />
+      {vm.instance && (
+        <EditPrescriptionSheet
+          open={editOpen}
+          instanceId={vm.instance.id}
+          onClose={() => { setEditOpen(false) }}
+        />
+      )}
     </Card>
   )
 }

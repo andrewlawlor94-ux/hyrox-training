@@ -344,6 +344,16 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .completed-earlier-sheet__field { display: flex; flex-direction: column; gap: var(--space-1); }
 .completed-earlier-sheet__input { min-height: var(--tap-min); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 0 var(--space-3); background: var(--bg); color: var(--text); }
 
+/* ---------- EditPrescriptionSheet ---------- */
+.edit-prescription-sheet { display: flex; flex-direction: column; gap: var(--space-3); }
+.edit-prescription-sheet__exercise-name { margin: 0; font-size: var(--font-size-lg); }
+.edit-prescription-sheet__fields { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.edit-prescription-sheet__fields .number-field { flex: 1 1 120px; min-width: 100px; }
+.edit-prescription-sheet__back { align-self: flex-start; min-height: var(--tap-min); background: transparent; border: none; color: var(--accent); font-weight: 600; padding: 0; }
+.edit-prescription-sheet__error { margin: 0; color: var(--caution); font-weight: 600; }
+.edit-prescription-sheet__picker { display: flex; flex-direction: column; gap: var(--space-2); }
+.edit-prescription-sheet__picker-option { width: 100%; justify-content: flex-start; }
+
 /* ---------- SubstitutionCard / RedFlagScreen ---------- */
 .substitution-card { display: flex; flex-direction: column; gap: var(--space-2); }
 .substitution-card__title { margin: 0; font-size: var(--font-size-lg); font-weight: 600; }
