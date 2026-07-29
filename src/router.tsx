@@ -6,17 +6,19 @@ import { HomeScreen } from '@/features/home/HomeScreen'
 import { SettingsScreen } from '@/features/settings/SettingsScreen'
 import { OnboardingScreen } from '@/features/onboarding/OnboardingScreen'
 import { WorkoutScreen } from '@/features/workout/WorkoutScreen'
+import { ProgressScreen } from '@/features/progress/ProgressScreen'
 
 /**
- * Home, Settings, and Workout logging (all three laid out inside
+ * Home, Settings, Workout logging, and Progress (all four laid out inside
  * `AppShell`, so the rest-timer bar and bottom nav stay visible) plus
  * Onboarding (full-screen, reached before any tab is meaningful). The
- * brief's fuller route table — Progress, Plan, the Week/Workout editors, the
- * exercise library — belongs to later tasks; wiring those paths now, with no
+ * brief's fuller route table — Plan, the Week/Workout editors, the exercise
+ * library — still belongs to later tasks; wiring those paths now, with no
  * screen behind them, would be the exact placeholder/dead-route pattern the
  * Global Constraints forbid. Each is added the task its screen lands,
- * mirroring how `BottomNav`'s `NAV_ITEMS` array grows. Any unmatched path
- * falls back to Home rather than a blank 404.
+ * mirroring how `BottomNav`'s `NAV_ITEMS` array grows (Progress's own tab
+ * lands in the Task 25/26 report's third commit). Any unmatched path falls
+ * back to Home rather than a blank 404.
  */
 export const AppRoutes: FC = () => (
   <Routes>
@@ -61,6 +63,14 @@ export const AppRoutes: FC = () => (
         element={(
           <ErrorBoundary>
             <WorkoutScreen />
+          </ErrorBoundary>
+        )}
+      />
+      <Route
+        path="/progress"
+        element={(
+          <ErrorBoundary>
+            <ProgressScreen />
           </ErrorBoundary>
         )}
       />

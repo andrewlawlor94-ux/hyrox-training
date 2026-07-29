@@ -378,4 +378,62 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .db-error-screen__actions { display: flex; gap: var(--space-3); justify-content: center; flex-wrap: wrap; }
 .db-error-screen__export-error { margin: 0; color: var(--elevated); font-size: var(--font-size-sm); }
 
+/* ---------- ProgressScreen (Tasks 25/26, §17: Strength / Running) ----------
+   `.chart-card__scroll` and `.chart-table__scroll` are the overflow-x:auto
+   containers a Recharts `ResponsiveContainer` (or the accessible table
+   fallback) scrolls WITHIN if its intrinsic content ever needs more than
+   375px — the page body itself must never be the thing that scrolls
+   horizontally (D-constraint, and the fieldset regression this app already
+   hit once — see SegmentedControl's own note). */
+.progress-screen { display: flex; flex-direction: column; gap: var(--space-4); }
+.progress-screen__heading { font-size: var(--font-size-2xl); margin: 0; }
+.progress-screen__loading { padding: var(--space-5); color: var(--text-muted); }
+
+.strength-progress, .running-progress { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.strength-progress__picker { display: flex; flex-direction: column; gap: var(--space-1); }
+.strength-progress__picker-label { font-size: var(--font-size-sm); font-weight: 600; color: var(--text-muted); }
+.strength-progress__picker-select {
+  min-height: var(--tap-min); font-size: var(--input-font-size); border: 1px solid var(--border);
+  border-radius: var(--radius-control); padding: 0 var(--space-3); background: var(--bg); color: var(--text);
+}
+
+.chart-card { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.chart-card h3 { font-size: var(--font-size-lg); margin: 0; }
+.chart-card h4 { font-size: var(--font-size-sm); text-transform: uppercase; letter-spacing: 0.02em; color: var(--text-muted); margin: 0; }
+.chart-card__scroll { overflow-x: auto; max-width: 100%; }
+.chart-card__note { margin: 0; font-weight: 600; }
+
+.volume-legend { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.chart-table { margin-top: var(--space-1); }
+.chart-table summary { cursor: pointer; font-size: var(--font-size-sm); font-weight: 600; color: var(--accent); min-height: var(--tap-min); display: flex; align-items: center; }
+.chart-table__scroll { overflow-x: auto; max-width: 100%; }
+.chart-table table { border-collapse: collapse; width: 100%; min-width: 320px; }
+.chart-table th, .chart-table td { text-align: left; padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--border); font-size: var(--font-size-sm); }
+
+.recent-sessions-list ul, .running-progress__stats ul, .running-progress__trajectory ul, .milestone-list__evidence {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1);
+}
+.recent-sessions-list__row { padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+.recent-sessions-list__date { margin: 0; font-weight: 600; }
+.recent-sessions-list__sets { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
+
+.strength-recommendation-card { display: flex; flex-direction: column; gap: var(--space-1); }
+.strength-recommendation-card__previous, .strength-recommendation-card__target, .strength-recommendation-card__reason { margin: 0; }
+.strength-recommendation-card__target { font-weight: 600; }
+.strength-recommendation-card__reason { color: var(--text-muted); font-size: var(--font-size-sm); }
+
+.personal-bests-card dl { display: grid; grid-template-columns: 1fr auto; gap: var(--space-1) var(--space-3); margin: 0; }
+.personal-bests-card dt { color: var(--text-muted); }
+.personal-bests-card dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+
+.milestone-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.milestone-list__item { display: flex; flex-direction: column; gap: var(--space-1); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
+.milestone-list__item:last-child { border-bottom: none; padding-bottom: 0; }
+.milestone-list__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+.milestone-list__evidence { color: var(--text-muted); font-size: var(--font-size-sm); }
+
+.running-progress__stats, .running-progress__trajectory { display: flex; flex-direction: column; gap: var(--space-2); }
+.running-progress__no-benchmark { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
+
 
