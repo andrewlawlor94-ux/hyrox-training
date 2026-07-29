@@ -29,6 +29,12 @@ const ProgressScreen = lazy(() =>
 const LibraryScreen = lazy(() =>
   import('@/features/library/LibraryScreen').then((module) => ({ default: module.LibraryScreen })))
 
+/** Plan (Task 27, §14) is now a bottom-nav tab (see `navItems.ts`) but is
+ * still visited far less often than Home — lazy for the same reason
+ * Progress/Library are. */
+const PlanScreen = lazy(() =>
+  import('@/features/plan/PlanScreen').then((module) => ({ default: module.PlanScreen })))
+
 /**
  * Home, Settings, Workout logging, and Progress (all four laid out inside
  * `AppShell`, so the rest-timer bar and bottom nav stay visible) plus
@@ -93,6 +99,16 @@ export const AppRoutes: FC = () => (
           <ErrorBoundary>
             <Suspense fallback={<p className="route-loading">Loading…</p>}>
               <ProgressScreen />
+            </Suspense>
+          </ErrorBoundary>
+        )}
+      />
+      <Route
+        path="/plan"
+        element={(
+          <ErrorBoundary>
+            <Suspense fallback={<p className="route-loading">Loading…</p>}>
+              <PlanScreen />
             </Suspense>
           </ErrorBoundary>
         )}

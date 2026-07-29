@@ -48,7 +48,7 @@ beforeEach(async () => {
 })
 
 describe('app shell', () => {
-  it('renders exactly three bottom-nav destinations, Home, Progress, and Settings, as accessible links', async () => {
+  it('renders exactly four bottom-nav destinations, Home, Progress, Plan, and Settings, as accessible links', async () => {
     await seedTestDb()
     await updateSettings({ onboardingCompletedAt: NOW })
     renderApp({ route: '/' })
@@ -56,9 +56,10 @@ describe('app shell', () => {
     await screen.findByRole('heading', { name: /home/i })
     const nav = screen.getByRole('navigation', { name: /primary/i })
     const links = within(nav).getAllByRole('link')
-    expect(links).toHaveLength(3)
+    expect(links).toHaveLength(4)
     expect(within(nav).getByRole('link', { name: 'Home' })).toBeInTheDocument()
     expect(within(nav).getByRole('link', { name: 'Progress' })).toBeInTheDocument()
+    expect(within(nav).getByRole('link', { name: 'Plan' })).toBeInTheDocument()
     expect(within(nav).getByRole('link', { name: 'Settings' })).toBeInTheDocument()
   })
 

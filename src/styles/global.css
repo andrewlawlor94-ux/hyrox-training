@@ -494,4 +494,93 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .exercise-history-list__date { margin: 0; font-weight: 600; }
 .exercise-history-list__sets { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
 
+/* ---------- Plan (Task 27, §14): week browser, workout/exercise editing,
+   plan-level operations. Every row here wraps (flex-wrap) rather than
+   forcing a fixed-width multi-target row -- the same fieldset-min-content
+   overflow this project has already hit once (see ScaleSelector's note). */
+.plan-screen { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.plan-screen__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
+
+.week-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.week-list__row {
+  width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2);
+  min-height: var(--tap-min); padding: var(--space-2) var(--space-3); background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-control); text-align: left;
+}
+.week-list__heading, .week-list__meta { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
+.week-list__number { font-weight: 600; }
+.week-list__phase { color: var(--text-muted); font-size: var(--font-size-sm); }
+.week-list__count { color: var(--text-muted); font-size: var(--font-size-sm); }
+
+.week-detail { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.week-detail__back { background: transparent; border: none; color: var(--accent); font-weight: 600; text-align: left; padding: 0; }
+.week-detail__heading { font-size: var(--font-size-xl); margin: 0; }
+.week-detail__label { margin: 0; color: var(--text-muted); }
+.week-detail__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.week-detail__row {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+}
+.week-detail__row-info { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.week-detail__row-name { font-weight: 600; overflow-wrap: anywhere; }
+.week-detail__row-chips { display: flex; gap: var(--space-1); flex-wrap: wrap; }
+.week-detail__row-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
+.week-detail__reorder-btn { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-control); }
+.week-detail__error, .workout-editor__error, .exercise-list-editor__error, .exercise-picker__error,
+.move-workout-control__error, .plan-manager__error, .edit-scope-sheet__error, .past-record-editor__error {
+  margin: 0; color: var(--elevated); font-size: var(--font-size-sm);
+}
+.week-detail__add-form { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.week-detail__add-form input, .week-detail__add-form select { min-height: var(--tap-min); width: 100%; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg); color: var(--text); }
+
+.workout-editor { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.workout-editor__field { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.workout-editor__field input, .workout-editor__field select, .workout-editor__field textarea {
+  min-height: var(--tap-min); width: 100%; padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg); color: var(--text);
+}
+.workout-editor__frozen, .workout-editor__past-confirm, .workout-editor__delete-confirm { display: flex; flex-direction: column; gap: var(--space-2); }
+.workout-editor__row-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.exercise-list-editor { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.exercise-list-editor__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.exercise-list-editor__row {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); background: var(--surface-2); border-radius: var(--radius-control);
+}
+.exercise-list-editor__row-info { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.exercise-list-editor__row-name { font-weight: 600; overflow-wrap: anywhere; }
+.exercise-list-editor__row-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
+
+.exercise-picker, .substitute-search-sheet, .prescription-editor, .edit-scope-sheet,
+.conflict-warning-sheet, .move-workout-control, .past-record-editor, .plan-manager {
+  display: flex; flex-direction: column; gap: var(--space-3); min-width: 0;
+}
+.exercise-picker input, .substitute-search-sheet input, .prescription-editor textarea, .plan-manager input {
+  min-height: var(--tap-min); width: 100%; padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg); color: var(--text);
+}
+.exercise-picker__list, .substitute-search-sheet__list, .plan-manager__list, .conflict-warning-sheet__list {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2);
+}
+.prescription-editor__notes { display: flex; flex-direction: column; gap: var(--space-1); }
+.edit-scope-sheet__actions, .conflict-warning-sheet__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.move-workout-control { flex-direction: row; flex-wrap: wrap; align-items: center; }
+.move-workout-control__label { font-weight: 600; }
+.move-workout-control__input { min-height: var(--tap-min); padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg); color: var(--text); }
+
+.past-record-editor__row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); min-width: 0; }
+.past-record-editor__set-index { font-weight: 600; min-width: 4ch; }
+
+.plan-manager__section { display: flex; flex-direction: column; gap: var(--space-2); }
+.plan-manager__row {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); background: var(--surface-2); border-radius: var(--radius-control);
+}
+.plan-manager__row-name { font-weight: 600; overflow-wrap: anywhere; }
+.plan-manager__row-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.plan-manager__hint { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
+
 
