@@ -251,6 +251,74 @@ describe('strength logging screen', () => {
     })
   })
 
+  it('completing a set with no edits on an exercise carrying a target RIR persists weight and reps but never a fabricated RIR', async () => {
+    // Matches the exact scenario a real athlete hit: week-1 back squat seeds
+    // targetLoad 175 lb, repMin 4, and a Base-phase target RIR of 3. Tapping
+    // Complete on all four sets without touching any field must log what was
+    // displayed for weight/reps (an assertion the athlete DID do the work)
+    // but must never invent an RIR — that's a judgement only the athlete can
+    // make, and the target is guidance to display, not a value to record.
+    const instanceId = await createWorkout([
+      { exerciseId: 'ex_back_squat', sets: 4, repMin: 4, repMax: 6, targetLoad: 175, loadUnit: 'lb', targetRir: 3 },
+    ])
+    await renderWorkout(instanceId)
+    await screen.findByText('Back squat')
+    await waitFor(() => { expect(screen.getAllByLabelText<HTMLInputElement>(/weight/i)).toHaveLength(4) })
+
+    for (let i = 0; i < 4; i += 1) {
+      const completeButton = await screen.findByRole('button', { name: new RegExp(`complete set ${String(i + 1)}`, 'i') })
+      await userEvent.click(completeButton)
+    }
+
+    await waitFor(async () => {
+      const sets = await db.strengthSets.where('instanceId').equals(instanceId).toArray()
+      expect(sets.filter((s) => s.isCompleted)).toHaveLength(4)
+    })
+
+    const sets = await db.strengthSets.where('instanceId').equals(instanceId).toArray()
+    for (const set of sets) {
+      // Weight and reps ARE present -- a fix that threw away all three fields
+      // (rather than only omitting the fabricated RIR) must fail this test too.
+      expect(set.weight).toBe(175)
+      expect(set.reps).toBe(4)
+      // Absence, not a loose falsy check: `0` or `undefined`-via-truthy-check
+      // would both wrongly pass a truthiness assertion here.
+      expect('rir' in set).toBe(false)
+    }
+  })
+
+  it('an untouched one-tap complete on a target-RIR exercise yields an optional-aim recommendation next session, not a confident increase', async () => {
+    const instanceId = await createWorkout([
+      { exerciseId: 'ex_back_squat', sets: 4, repMin: 4, repMax: 6, targetLoad: 175, loadUnit: 'lb', targetRir: 3 },
+    ])
+    const first = await renderWorkout(instanceId)
+    await screen.findByText('Back squat')
+    await waitFor(() => { expect(screen.getAllByLabelText<HTMLInputElement>(/weight/i)).toHaveLength(4) })
+
+    for (let i = 0; i < 4; i += 1) {
+      const completeButton = await screen.findByRole('button', { name: new RegExp(`complete set ${String(i + 1)}`, 'i') })
+      await userEvent.click(completeButton)
+    }
+    await waitFor(async () => {
+      const sets = await db.strengthSets.where('instanceId').equals(instanceId).toArray()
+      expect(sets.filter((s) => s.isCompleted)).toHaveLength(4)
+    })
+    first.unmount()
+
+    // Move to a later session and load a fresh instance for the same
+    // exercise -- this is the user-visible consequence: with no recorded
+    // RIR, `recommendStrengthTarget` must offer the honest optional-aim
+    // wording, never the confident "you completed all prescribed reps"
+    // increase that a fabricated RIR 3 would have driven.
+    vi.setSystemTime(new Date(2026, 7, 25, 9, 0, 0))
+    const nextInstanceId = await createWorkout([{ exerciseId: 'ex_back_squat', sets: 4, repMin: 4, repMax: 6, targetRir: 3 }])
+    await renderWorkout(nextInstanceId)
+    await screen.findByText(/All reps completed, but no RIR recorded/)
+
+    expect(screen.getByText(/All reps completed, but no RIR recorded — treat 180 lb as an optional aim\./)).toBeInTheDocument()
+    expect(screen.queryByText('You completed all prescribed reps last time.')).toBeNull()
+  })
+
   it('completing a set starts the rest timer using that exercise\'s defaultRestSec', async () => {
     const instanceId = await createWorkout([{ exerciseId: 'ex_back_squat' }])
     await renderWorkout(instanceId)
