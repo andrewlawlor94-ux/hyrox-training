@@ -214,6 +214,9 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .settings-screen__section h2 { font-size: var(--font-size-lg); margin: 0; }
 .settings-screen__vibration { border: none; margin: 0; padding: 0; }
 .settings-screen__note { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
+.settings-screen__status { margin: 0; font-size: var(--font-size-sm); }
+.settings-screen__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.settings-screen__reset { display: flex; flex-direction: column; gap: var(--space-2); }
 
 /* ---------- Home: Today's workout / This week / Goal snapshot (Task 24) ----------
    Shared rules: every card is a flex column, every list resets to no bullets, and

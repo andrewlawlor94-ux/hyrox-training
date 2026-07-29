@@ -4,13 +4,14 @@ import { ProfileSettings } from './ProfileSettings'
 import { GoalSettings } from './GoalSettings'
 import { UnitSettings } from './UnitSettings'
 import { TimerSettings } from './TimerSettings'
+import { BackupSettings } from './BackupSettings'
 
 /**
  * Settings-lite (Task 29, reduced scope): athlete profile, race goal and
- * date, units, and rest-timer defaults. The backup/restore UI and the HYROX
- * standards editor are a later phase — see the Task 24/29L report — so this
- * screen stays the smallest HONEST set of controls that are real and working
- * today, not a placeholder for what's still to come.
+ * date, units, and rest-timer defaults — plus backup/restore (Task 17),
+ * added once the athlete started logging real sessions and local-only
+ * IndexedDB became the single copy of their training history. The HYROX
+ * standards editor is still a later phase — see the Task 24/29L report.
  */
 export const SettingsScreen: FC = () => {
   const settings = useSettings()
@@ -24,6 +25,7 @@ export const SettingsScreen: FC = () => {
       <GoalSettings />
       <UnitSettings settings={settings} />
       <TimerSettings settings={settings} />
+      <BackupSettings settings={settings} />
     </div>
   )
 }
