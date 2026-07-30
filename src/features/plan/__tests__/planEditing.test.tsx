@@ -56,6 +56,17 @@ async function seedPlanFixture(): Promise<void> {
     id: 'set_1', instanceId: 'wi_1_str', instancePrescriptionId: 'ip_1_str', exerciseId: EXERCISE_ID,
     setIndex: 0, weight: 175, unit: 'lb', reps: 5, isCompleted: true, completedAt: NOW, isWarmup: false,
   })
+
+  // A run and a station log on the SAME frozen instance, so one editor render
+  // exercises all three log kinds. `paceSecPerKm` is stored deliberately: a
+  // distance correction must drop it rather than leave it disagreeing.
+  await db.runLogs.add({
+    id: 'run_1', instanceId: 'wi_1_str', distanceKm: 5, durationSec: 1800, paceSecPerKm: 360,
+    surface: 'road', runType: 'easy', notes: '', loggedAt: NOW,
+  })
+  await db.stationLogs.add({
+    id: 'stn_1', instanceId: 'wi_1_str', station: 'sledPush', distanceM: 50, load: 152, loadUnit: 'kg', notes: '',
+  })
 }
 
 async function setup(): Promise<void> {
@@ -158,6 +169,64 @@ describe('the Plan tab / week browser', () => {
     const corrected = await db.strengthSets.get('set_1')
     expect(corrected?.reps).toBe(5)
     expect(corrected?.isCompleted).toBe(true)
+  })
+
+  // Strength-only correction was a real gap, not a scoping choice: a mistyped
+  // run distance or sled load on a completed session was uncorrectable while
+  // the equivalent mistyped weight was one tap away.
+  it('corrects a past run and a past station log too, not only strength sets', async () => {
+    await renderPlan()
+    await userEvent.click(await screen.findByText(/Week 1/))
+    const editButtons = await screen.findAllByRole('button', { name: 'Edit' })
+    await userEvent.click(editButtons[0]!)
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Edit this past record' }))
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Yes, edit this record' }))
+
+    const runDistance = await within(dialog).findByLabelText<HTMLInputElement>('Distance', { selector: '#past-run-distance-run_1' })
+    fireEvent.change(runDistance, { target: { value: '5.4' } })
+    fireEvent.blur(runDistance)
+    await waitFor(async () => {
+      expect((await db.runLogs.get('run_1'))?.distanceKm).toBe(5.4)
+    })
+    // The stored pace was derived from the OLD distance, so leaving it would
+    // make the row internally inconsistent. It must be dropped, not recomputed
+    // here, so every reader re-derives from the corrected numbers.
+    expect((await db.runLogs.get('run_1'))?.paceSecPerKm).toBeUndefined()
+    // Untouched fields survive the correction.
+    expect((await db.runLogs.get('run_1'))?.durationSec).toBe(1800)
+    expect((await db.runLogs.get('run_1'))?.surface).toBe('road')
+
+    const stationLoad = await within(dialog).findByLabelText<HTMLInputElement>('Load', { selector: '#past-station-load-stn_1' })
+    fireEvent.change(stationLoad, { target: { value: '140' } })
+    fireEvent.blur(stationLoad)
+    await waitFor(async () => {
+      expect((await db.stationLogs.get('stn_1'))?.load).toBe(140)
+    })
+    expect((await db.stationLogs.get('stn_1'))?.distanceM).toBe(50)
+
+    // The instance itself stays frozen throughout — correcting a record never
+    // reopens it.
+    expect((await db.workoutInstances.get('wi_1_str'))?.frozen).toBe(true)
+  })
+
+  it('refuses to blank a run\'s required distance, since there is no valid partial run row', async () => {
+    await renderPlan()
+    await userEvent.click(await screen.findByText(/Week 1/))
+    const editButtons = await screen.findAllByRole('button', { name: 'Edit' })
+    await userEvent.click(editButtons[0]!)
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Edit this past record' }))
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Yes, edit this record' }))
+
+    const runDistance = await within(dialog).findByLabelText<HTMLInputElement>('Distance', { selector: '#past-run-distance-run_1' })
+    fireEvent.change(runDistance, { target: { value: '' } })
+    fireEvent.blur(runDistance)
+
+    // Neither zeroed (this project has been burned by treating 0 as data) nor
+    // deleted — "correct a typo" must not mean "discard the run".
+    const after = await db.runLogs.get('run_1')
+    expect(after?.distanceKm).toBe(5)
   })
 
   it('a non-frozen workout (even in the past) opens the normal editor', async () => {

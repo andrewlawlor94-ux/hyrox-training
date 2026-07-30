@@ -2,17 +2,25 @@ import { db } from '@/data/db'
 import type { IntervalSplit, RunLog, StationLog, SymptomLog, WorkoutInstance } from '@/data/types'
 import { assertMutable } from './guard'
 
-async function assertMutableFor(instanceId: string): Promise<WorkoutInstance> {
+/** Opt-in escape hatch for the "edit this past record" path only. Named rather
+ * than inlined so every function carrying it is greppable. */
+export interface HistoryEditOpts { allowHistoryEdit?: boolean }
+
+/** `opts` is threaded straight through to `assertMutable`, so the one
+ * deliberate "correct a past record" path can pass `{ allowHistoryEdit: true }`
+ * exactly the way `upsertSet` already does. Every other caller omits it and
+ * frozen history stays untouchable. */
+async function assertMutableFor(instanceId: string, opts?: HistoryEditOpts): Promise<WorkoutInstance> {
   const instance = await db.workoutInstances.get(instanceId)
   if (!instance) throw new Error(`No WorkoutInstance "${instanceId}"`)
-  assertMutable(instance)
+  assertMutable(instance, opts)
   return instance
 }
 
 /** `RunLog.instanceId` is required, so every run log always has an owning
  * instance to guard against. */
-export async function saveRunLog(log: RunLog, splits: IntervalSplit[]): Promise<void> {
-  await assertMutableFor(log.instanceId)
+export async function saveRunLog(log: RunLog, splits: IntervalSplit[], opts?: HistoryEditOpts): Promise<void> {
+  await assertMutableFor(log.instanceId, opts)
   await db.transaction('rw', db.runLogs, db.intervalSplits, async () => {
     await db.runLogs.put(log)
     await db.intervalSplits.bulkPut(splits)
@@ -39,8 +47,8 @@ export async function deleteRunLog(runLogId: string, instanceId: string): Promis
 
 /** `StationLog.instanceId` is required, so every station log always has an
  * owning instance to guard against. */
-export async function saveStationLog(log: StationLog): Promise<void> {
-  await assertMutableFor(log.instanceId)
+export async function saveStationLog(log: StationLog, opts?: HistoryEditOpts): Promise<void> {
+  await assertMutableFor(log.instanceId, opts)
   await db.stationLogs.put(log)
 }
 
