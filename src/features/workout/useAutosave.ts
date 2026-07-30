@@ -43,6 +43,26 @@ export interface UseAutosaveResult {
  */
 export function useAutosave(debounceMs = AUTOSAVE_DEBOUNCE_MS): UseAutosaveResult {
   const pending = useRef(new Map<string, PendingEntry>())
+  /**
+   * Saves that have STARTED but not finished, per key.
+   *
+   * Without this, `flushKey` returned immediately whenever the pending map held
+   * no timer for the key — including when a save for that key was still in
+   * flight — and that was a real data-loss race, not a theoretical one:
+   *
+   *   1. the athlete types reps, which schedules a debounced save whose closure
+   *      carries the row as it was, `isCompleted: false` and all;
+   *   2. tapping Complete blurs the input first, so `handleBlur` fires
+   *      `flushKey` WITHOUT awaiting it — the entry leaves the map and the write
+   *      begins;
+   *   3. `handleComplete`'s own `await flushKey(...)` finds an empty map and
+   *      returns instantly, believing everything is settled;
+   *   4. `completeSet` writes `isCompleted: true`;
+   *   5. the step-2 write lands last and puts `isCompleted: false` back.
+   *
+   * The set silently un-completes. Awaiting the in-flight promise closes it.
+   */
+  const inFlight = useRef(new Map<string, Promise<void>>())
 
   // Never rejects: a failed write has no UI left to report to by the time
   // most callers reach it (a debounced timer firing, a blur handler, an
@@ -51,11 +71,18 @@ export function useAutosave(debounceMs = AUTOSAVE_DEBOUNCE_MS): UseAutosaveResul
   // for visibility instead.
   const flushKey = useCallback(async (key: string): Promise<void> => {
     const entry = pending.current.get(key)
-    if (!entry) return
+    if (!entry) {
+      // Nothing scheduled — but a save started by an earlier, un-awaited flush
+      // may still be running. Wait for it rather than reporting "settled".
+      await inFlight.current.get(key)
+      return
+    }
     clearTimeout(entry.timer)
     pending.current.delete(key)
     try {
-      await entry.save()
+      const running = entry.save()
+      inFlight.current.set(key, running.then(() => undefined, () => undefined))
+      await running
     } catch (err) {
       // A flush racing a closing database is expected, not a fault: the unmount
       // handler fires while the athlete is navigating away (and in tests while
@@ -64,6 +91,8 @@ export function useAutosave(debounceMs = AUTOSAVE_DEBOUNCE_MS): UseAutosaveResul
       // hide genuine data loss, which is the one thing this app cannot afford.
       if (isDatabaseClosed(err)) return
       console.error('Autosave write failed', err)
+    } finally {
+      inFlight.current.delete(key)
     }
   }, [])
 

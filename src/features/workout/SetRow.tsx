@@ -1,6 +1,6 @@
 import type { FC } from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { completeSet, undoSet, upsertSet } from '@/data/repositories'
+import { completeSet, saveSetValues, undoSet } from '@/data/repositories'
 import type { StrengthSet, Unit } from '@/data/types'
 import { Button, Chip, NumberField } from '@/components'
 import type { UseAutosaveResult } from './useAutosave'
@@ -84,14 +84,14 @@ export const SetRow: FC<SetRowProps> = ({ set, index, defaultWeight, defaultUnit
       reps: patch.reps !== undefined ? patch.reps : reps,
       rir: patch.rir !== undefined ? patch.rir : rir,
     }
+    // `saveSetValues`, never a whole-row `upsertSet` spread from this component's
+    // `set` prop: that spread carried `isCompleted` from whenever the prop was
+    // captured, so a debounced write landing after a completion un-completed the
+    // set. Nulls are passed through deliberately — `applyOptionalNumbers` reads
+    // `null` as "the athlete cleared this" and deletes the field, which is not
+    // the same as omitting it.
     autosave.schedule(set.id, async () => {
-      await upsertSet({
-        ...set,
-        unit,
-        ...(merged.weight !== null ? { weight: merged.weight } : {}),
-        ...(merged.reps !== null ? { reps: merged.reps } : {}),
-        ...(merged.rir !== null ? { rir: merged.rir } : {}),
-      })
+      await saveSetValues(set.id, { weight: merged.weight, reps: merged.reps, rir: merged.rir, unit })
     })
   }
 

@@ -618,3 +618,156 @@ describe('strength logging screen', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Week 1 · Session 1')
   })
 })
+
+/**
+ * Regression cover for the athlete's report: "Complete button on bent knee calf
+ * raise for second set didn't work. Then tibialis raise (the next exercise)
+ * didn't work either."
+ *
+ * The write always succeeded — `strengthSets` reached `isCompleted: true` — but
+ * the screen never re-rendered for the SECOND and later strength exercises, so
+ * the row kept offering "Complete". Tapping again did nothing, because
+ * `completeSet` reads the row fresh, sees it already completed and returns.
+ *
+ * Cause: `loadWorkout` ran one `where('instancePrescriptionId').equals(...)`
+ * query PER prescription, registering N separate observed index ranges on one
+ * table; writes stopped invalidating the later ones. It now reads the whole
+ * instance in a single query and groups in JS.
+ *
+ * The critical part of this test is that it uses THREE exercises and asserts
+ * the UI after each completion. Every pre-existing test used one exercise, which
+ * is exactly why a green suite missed this.
+ */
+describe('completing sets across several exercises keeps the UI in step with the database', () => {
+  it('reflects every completion on screen, not just the first exercise\'s', async () => {
+    const instanceId = await createWorkout([
+      { exerciseId: 'ex_calf_raise_straight_knee', sets: 2, repMin: 12 },
+      { exerciseId: 'ex_calf_raise_bent_knee', sets: 2, repMin: 12 },
+      { exerciseId: 'ex_tibialis_raise', sets: 2, repMin: 15 },
+    ])
+    await renderWorkout(instanceId)
+    await screen.findByText('Straight-knee calf raise')
+    await waitFor(() => { expect(screen.getAllByRole('button', { name: /^Complete set/ }).length).toBe(6) })
+
+    const names = ['Straight-knee calf raise', 'Bent-knee calf raise', 'Tibialis raise']
+    let expectedDone = 0
+
+    // Located by the card's own heading TEXT rather than its accessible name:
+    // the name is a button into the exercise's settings, so the heading's
+    // accessible name also carries that control's label.
+    const cardFor = (name: string): HTMLElement => {
+      const card = [...document.querySelectorAll('article')]
+        .find((a) => a.querySelector('.target-header__name')?.textContent?.startsWith(name))
+      if (!card) throw new Error(`expected a card for ${name}`)
+      return card
+    }
+
+    for (const name of names) {
+      for (const setNumber of [1, 2]) {
+        const cardEl = cardFor(name)
+        const button = [...cardEl.querySelectorAll('button')]
+          .find((b) => b.getAttribute('aria-label') === `Complete set ${String(setNumber)}`)
+        expect(button, `${name} set ${String(setNumber)} should still offer Complete`).toBeDefined()
+
+        fireEvent.click(button as HTMLButtonElement)
+        expectedDone += 1
+
+        // The database took the write...
+        await waitFor(async () => {
+          const done = (await db.strengthSets.where('instanceId').equals(instanceId).toArray())
+            .filter((row) => row.isCompleted).length
+          expect(done).toBe(expectedDone)
+        })
+
+        // ...AND the screen shows it. This is the half that used to fail: the
+        // row must now offer Undo, which is only possible if the live query
+        // re-ran and handed the card a fresh `isCompleted`.
+        await waitFor(() => {
+          const refreshed = cardFor(name)
+          const undo = [...refreshed.querySelectorAll('button')]
+            .some((b) => b.getAttribute('aria-label') === `Undo set ${String(setNumber)}`)
+          expect(undo, `${name} set ${String(setNumber)} should show Undo after completing`).toBe(true)
+        })
+      }
+    }
+
+    // Every row across all three exercises ends up completed on screen, not
+    // merely in the database.
+    await waitFor(() => {
+      expect(screen.getAllByRole('button', { name: /^Undo set/ })).toHaveLength(6)
+      expect(screen.queryAllByRole('button', { name: /^Complete set/ })).toHaveLength(0)
+    })
+  })
+})
+
+/**
+ * The athlete's report: "Complete button on bent knee calf raise for second set
+ * didn't work. Then tibialis raise (the next exercise) didn't work either."
+ *
+ * Cause: typing into a set scheduled a debounced autosave whose closure carried
+ * the whole row, `isCompleted: false` included. Tapping Complete blurs the input
+ * first, so the blur's `flushKey` started that write WITHOUT being awaited;
+ * `handleComplete`'s own `await flushKey` then found an empty pending map and
+ * returned immediately, `completeSet` wrote `isCompleted: true`, and the earlier
+ * write landed last and put `false` back. The row reverted to "Complete", and
+ * tapping again did nothing because `completeSet` no-ops on a set the database
+ * already reports as complete.
+ *
+ * Two fixes, both asserted here: `flushKey` now awaits an in-flight save, and the
+ * autosave writes through `saveSetValues`, which re-reads the row and CANNOT
+ * express "also mark this incomplete".
+ */
+describe('typing a value and then completing the set', () => {
+  it('keeps the set completed, and keeps the typed value', async () => {
+    const instanceId = await createWorkout([{ exerciseId: 'ex_back_squat', sets: 2, repMin: 5 }])
+    await renderWorkout(instanceId)
+    await screen.findByText('Back squat')
+    await waitFor(() => { expect(screen.getAllByLabelText<HTMLInputElement>(/weight, set/i)).toHaveLength(2) })
+
+    // Type into set 2 specifically — set 1 is usually one-tapped straight from
+    // the prefill, which is why it appeared to work while set 2 did not.
+    const weight = screen.getByLabelText<HTMLInputElement>('Weight, set 2')
+    fireEvent.change(weight, { target: { value: '205' } })
+    // Blur (as tapping the button does) then immediately complete: this is the
+    // exact interleaving that lost the completion.
+    fireEvent.blur(weight)
+    fireEvent.click(screen.getByRole('button', { name: 'Complete set 2' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Undo set 2' })).toBeInTheDocument()
+    })
+
+    // And it STAYS completed once every queued write has settled — the revert
+    // used to arrive a beat later, so a same-tick assertion would have passed
+    // even against the bug.
+    await new Promise((resolve) => { setTimeout(resolve, 400) })
+
+    const rows = await db.strengthSets.where('instanceId').equals(instanceId).toArray()
+    const secondSet = rows.find((row) => row.setIndex === 1)
+    expect(secondSet?.isCompleted, 'set 2 must still be completed').toBe(true)
+    expect(secondSet?.weight, 'the typed weight must survive the completion').toBe(205)
+    expect(screen.getByRole('button', { name: 'Undo set 2' })).toBeInTheDocument()
+  })
+
+  it('a debounced write that lands after a completion can no longer un-complete it', async () => {
+    const instanceId = await createWorkout([{ exerciseId: 'ex_back_squat', sets: 1, repMin: 5 }])
+    await renderWorkout(instanceId)
+    await screen.findByText('Back squat')
+    await waitFor(() => { expect(screen.getAllByLabelText<HTMLInputElement>(/weight, set/i)).toHaveLength(1) })
+
+    // Type WITHOUT blurring, so the save stays on its debounce timer, then
+    // complete. The timer fires afterwards, which is the ordering the old
+    // whole-row spread turned into a silent revert.
+    fireEvent.change(screen.getByLabelText('Weight, set 1'), { target: { value: '199' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Complete set 1' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Undo set 1' })).toBeInTheDocument()
+    })
+    await new Promise((resolve) => { setTimeout(resolve, 600) })
+
+    const row = (await db.strengthSets.where('instanceId').equals(instanceId).toArray())[0]
+    expect(row?.isCompleted).toBe(true)
+    expect(row?.weight).toBe(199)
+  })
+})

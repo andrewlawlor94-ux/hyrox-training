@@ -231,6 +231,31 @@ function applyOptionalNumbers(set: StrengthSet, patch: OptionalNumberPatch | und
 }
 
 /**
+ * Writes ONLY the athlete's measured values onto an existing set, re-reading the
+ * row first so it can never carry a stale `isCompleted`/`completedAt` back into
+ * the database.
+ *
+ * This exists because the autosave path used to call `upsertSet({ ...set, ... })`
+ * with `set` captured from a React prop. That spread included `isCompleted`, so a
+ * debounced write scheduled BEFORE a completion and landing AFTER it silently
+ * un-completed the set — the athlete tapped Complete, the row reverted to
+ * "Complete", and tapping again did nothing because `completeSet` no-ops on a set
+ * it believes is already done. Ordering fixes (awaiting in-flight flushes) help,
+ * but they leave the hazard in place; a function that CANNOT express "and also
+ * mark this incomplete" removes it.
+ *
+ * A missing row is a silent no-op, matching `completeSet`/`undoSet`: a flush
+ * arriving after the set was removed is a lost race, not a fault.
+ */
+export async function saveSetValues(setId: string, values: OptionalNumberPatch): Promise<void> {
+  const set = await db.strengthSets.get(setId)
+  if (!set) return
+  const instance = await loadInstanceOrThrow(set.instanceId)
+  assertMutable(instance)
+  await db.strengthSets.put(applyOptionalNumbers(set, values))
+}
+
+/**
  * Marks a set complete AND persists its currently-displayed weight/reps/rir
  * in the same write — the one-tap flow (accept the prefill, tap Complete,
  * touch nothing) must actually log what was displayed, not just flip a flag.

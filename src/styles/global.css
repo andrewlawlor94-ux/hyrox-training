@@ -395,8 +395,24 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .exercise-card__station-fields .number-field { flex: 1 1 120px; min-width: 100px; }
 
 .target-header { display: flex; flex-direction: column; gap: var(--space-1); }
-.target-header__title-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.target-header__title-row { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
+/* The rep scheme is pushed to the far end; the Adjust hint stays beside the name. */
+.target-header__title-row .target-header__scheme { margin-left: auto; }
 .target-header__name { font-size: var(--font-size-lg); margin: 0; }
+/* The name is a button into this exercise's settings. Styled as the heading it
+   sits inside — not as a button — so the card does not read as a row of
+   controls, with a small "Adjust" affordance carrying the discoverability. */
+.target-header__name-button {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  background: none; border: none; padding: 0; margin: 0;
+  min-height: var(--tap-min); min-width: 0;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.target-header__name-hint {
+  font-size: var(--font-size-xs); font-weight: 600; color: var(--accent);
+  border: 1px solid var(--accent-soft); background: var(--accent-soft);
+  border-radius: var(--radius-control); padding: 0 var(--space-2); white-space: nowrap;
+}
 .target-header__scheme { color: var(--text-muted); font-size: var(--font-size-sm); flex-shrink: 0; }
 .target-header__line { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
 .target-header__target-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }

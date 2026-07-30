@@ -118,13 +118,40 @@ async function loadWorkout(instanceId: string, today: ISODate): Promise<WorkoutD
   const template = await db.workoutTemplates.get(instance.templateId)
   const standards = await db.hyroxStandards.toArray()
 
+  /**
+   * ONE query for the whole instance's sets, grouped in JS — not one indexed
+   * query per prescription.
+   *
+   * That per-prescription form (`where('instancePrescriptionId').equals(...)`)
+   * was a real, reproducible bug, not a style preference: completing sets on the
+   * SECOND and later strength exercises wrote to the database correctly and then
+   * never re-rendered, so the card kept showing "Complete" for a set that was
+   * already logged. Tapping it again did nothing, because `completeSet` reads the
+   * row fresh, sees `isCompleted: true` and returns — the athlete's report was
+   * "the Complete button didn't work".
+   *
+   * A `liveQuery` re-runs only when a write intersects a range it observed. With
+   * N prescriptions this registered N separate index ranges on one table, and
+   * writes stopped invalidating the later ones. Reading the whole instance
+   * registers a single range that every set in this workout falls inside, so any
+   * completion re-runs the query. It is also exactly the pattern the run and
+   * station branches below already use (and their live updates never broke).
+   */
+  const allSets = await db.strengthSets.where('instanceId').equals(instanceId).toArray()
+  const setsByPrescriptionId = new Map<string, StrengthSet[]>()
+  for (const set of allSets) {
+    const list = setsByPrescriptionId.get(set.instancePrescriptionId) ?? []
+    list.push(set)
+    setsByPrescriptionId.set(set.instancePrescriptionId, list)
+  }
+
   const exercises: WorkoutExerciseVM[] = []
   for (const prescription of prescriptions) {
     const exercise = await db.exercises.get(prescription.exerciseId)
     if (!exercise) continue
 
     if (exercise.measurementType === 'strengthSets') {
-      const sets = await db.strengthSets.where('instancePrescriptionId').equals(prescription.id).sortBy('setIndex')
+      const sets = [...(setsByPrescriptionId.get(prescription.id) ?? [])].sort((a, b) => a.setIndex - b.setIndex)
       const recommendation = await buildRecommendation(exercise, prescription, today)
       exercises.push({
         kind: 'strength', prescription, exercise, sets, recommendation,

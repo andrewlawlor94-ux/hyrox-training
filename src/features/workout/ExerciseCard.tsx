@@ -2,6 +2,7 @@ import type { FC } from 'react'
 import { useState } from 'react'
 import { Button, Card } from '@/components'
 import { addSet, removeSet, upsertSet } from '@/data/repositories'
+import { primeAudio } from '@/features/timer/feedback'
 import { useRestTimer } from '@/features/timer/useRestTimer'
 import { EditPrescriptionSheet } from './EditPrescriptionSheet'
 import { hasUnknownLoad } from './loadPresentation'
@@ -41,6 +42,13 @@ const StrengthCard: FC<StrengthCardProps> = ({ item, frozen }) => {
   const defaultWeight = unknownLoad ? null : prefillLoad.value
 
   function handleCompleted(): void {
+    // Unlock audio HERE, inside the tap. A browser only lets an AudioContext
+    // start from a user gesture, and rest-timer expiry is not one — without
+    // this the expiry tone is scheduled against a suspended context whose clock
+    // never advances, so it is silent with no error. Called unconditionally: it
+    // makes no sound itself, and checking the sound setting first would mean
+    // enabling sound mid-session never took effect until the next reload.
+    primeAudio()
     start({ exerciseId: exercise.id, label: exercise.name, totalSec: exercise.defaultRestSec }).catch(logAndIgnore)
   }
 
@@ -79,6 +87,7 @@ const StrengthCard: FC<StrengthCardProps> = ({ item, frozen }) => {
         recommendation={recommendation}
         targetReps={targetReps}
         onUseTarget={() => { handleUseTarget().catch(logAndIgnore) }}
+        {...(frozen ? {} : { onOpenSettings: () => { setEditOpen(true) } })}
       />
       <div className="exercise-card__sets">
         {sets.map((set, index) => (
@@ -98,9 +107,6 @@ const StrengthCard: FC<StrengthCardProps> = ({ item, frozen }) => {
         <Button variant="quiet" size="sm" onClick={() => { handleAddSet().catch(logAndIgnore) }}>+ Add set</Button>
         {sets.length > 0 && (
           <Button variant="quiet" size="sm" onClick={() => { handleRemoveSet().catch(logAndIgnore) }}>Remove set</Button>
-        )}
-        {!frozen && (
-          <Button variant="quiet" size="sm" onClick={() => { setEditOpen(true) }}>Edit</Button>
         )}
       </div>
       {prescription.notes && <p className="exercise-card__notes">{`Notes: ${prescription.notes}`}</p>}

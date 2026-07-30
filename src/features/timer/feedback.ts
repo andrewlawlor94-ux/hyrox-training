@@ -16,24 +16,92 @@ export function vibrationSupported(): boolean {
   return typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function'
 }
 
+/** Peak gain for the expiry tone. Below 1 so it is a cue, not a jump-scare. */
+const TONE_PEAK_GAIN = 0.25
+/** Ramp applied at the start and end of the tone. Without it the oscillator
+ * starts and stops on a discontinuity, which is audible as a click. */
+const TONE_RAMP_SEC = 0.01
+
 function audioContextSupported(): boolean {
   return typeof window !== 'undefined' && typeof window.AudioContext === 'function'
 }
 
-/** Plays a short tone via the Web Audio API. `AudioContext` is constructed
- * lazily, right here, only when sound is actually enabled — never at module
- * load or on every timer tick — and only when the constructor exists at all
- * (jsdom and some browsers omit it entirely). */
+/**
+ * ONE AudioContext for the page, not one per tone.
+ *
+ * Constructing a fresh context per expiry was a real defect with two separate
+ * failure modes, which together are why the athlete reported the sound "not
+ * working" despite being enabled:
+ *
+ * 1. Browsers cap concurrent AudioContexts (Chrome around six). Nothing here
+ *    ever closed one, so after a handful of rest timers construction began to
+ *    fail and every later tone was silent — it worked at the start of a session
+ *    and stopped partway through.
+ * 2. A context created outside a user gesture starts `suspended`. Timer expiry
+ *    is not a gesture, so `currentTime` never advanced and the scheduled
+ *    `stop()` never arrived: silence, with no error.
+ *
+ * `primeAudio` fixes (2) by creating and resuming the context during the tap
+ * that STARTS the timer, which is a genuine gesture. The context then stays
+ * usable for the expiry that follows.
+ */
+let sharedContext: AudioContext | null = null
+
+function audioContext(): AudioContext | null {
+  if (!audioContextSupported()) return null
+  if (sharedContext === null || sharedContext.state === 'closed') {
+    try {
+      sharedContext = new window.AudioContext()
+    } catch {
+      // Construction can still fail (no output device, hardened privacy mode).
+      // Silence is an acceptable outcome; throwing from a timer tick is not.
+      return null
+    }
+  }
+  return sharedContext
+}
+
+/**
+ * Call from a user gesture that precedes a tone — completing a set, which is
+ * what starts a rest timer. Creates and resumes the shared context so the tone
+ * at expiry is audible. Safe to call repeatedly and safe to call when sound is
+ * disabled (it only unlocks; it makes no noise).
+ */
+export function primeAudio(): void {
+  const context = audioContext()
+  if (context === null) return
+  if (context.state === 'suspended') void context.resume()
+}
+
+/** Plays a short tone via the Web Audio API on the shared context, resuming it
+ * first in case it was suspended while the app was backgrounded. */
 function playTone(): void {
-  if (!audioContextSupported()) return
-  const context = new window.AudioContext()
+  const context = audioContext()
+  if (context === null) return
+  // Resume is async; scheduling against `currentTime` still works once it
+  // resolves, because the ramp times below are relative to it.
+  if (context.state === 'suspended') void context.resume()
+
   const oscillator = context.createOscillator()
   const gain = context.createGain()
   oscillator.frequency.value = TONE_FREQUENCY_HZ
   oscillator.connect(gain)
   gain.connect(context.destination)
-  oscillator.start()
-  oscillator.stop(context.currentTime + TONE_DURATION_SEC)
+
+  const start = context.currentTime
+  const end = start + TONE_DURATION_SEC
+  // Explicit envelope: ramp up, hold, ramp down. A bare oscillator at full gain
+  // clicks at both ends.
+  gain.gain.setValueAtTime(0, start)
+  gain.gain.linearRampToValueAtTime(TONE_PEAK_GAIN, start + TONE_RAMP_SEC)
+  gain.gain.setValueAtTime(TONE_PEAK_GAIN, end - TONE_RAMP_SEC)
+  gain.gain.linearRampToValueAtTime(0, end)
+
+  oscillator.start(start)
+  oscillator.stop(end)
+  // Release the nodes once done. The CONTEXT is deliberately kept — that is the
+  // whole point of sharing it.
+  oscillator.onended = () => { oscillator.disconnect(); gain.disconnect() }
 }
 
 /**

@@ -72,7 +72,10 @@ async function renderWorkout(instanceId: string): Promise<void> {
 }
 
 async function openEditSheet(): Promise<HTMLElement> {
-  await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+  // The exercise NAME is the way in now, replacing a separate "Edit" button
+  // (athlete: "make it so I can click an exercise in the workout and get brought
+  // to the page to adjust workout specific settings").
+  await userEvent.click(await screen.findByRole('button', { name: /back squat/i }))
   const dialog = await screen.findByRole('dialog')
   // The sheet's own data is a `useLiveQuery` read, so the dialog can mount
   // showing "Loading..." for a tick before the form itself appears -- wait
@@ -177,10 +180,16 @@ describe('editing a prescription from the workout screen', () => {
     expect(await db.strengthSets.get('set_frozen')).toEqual(setBefore)
   })
 
-  it('offers no Edit control on a frozen (completed) instance', async () => {
+  it('offers no way into settings on a frozen (completed) instance', async () => {
     await renderWorkout('wi_frozen')
     await screen.findByText('Back squat')
+    // Neither the old Edit button nor the tappable name: completed history is
+    // not adjustable, and a name that refused to open anything would be worse
+    // than a plain one.
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /back squat/i })).toBeNull()
+    // The name is still rendered, just not as a control.
+    expect(screen.getByRole('heading', { name: 'Back squat' })).toBeInTheDocument()
   })
 
   it('surfaces a real error rather than swallowing it if applying "Just this workout" against a frozen instance is somehow attempted', async () => {

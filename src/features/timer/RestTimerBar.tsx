@@ -55,9 +55,17 @@ export const RestTimerBar: FC = () => {
   // while the row exists, so no separate timeout is needed.
   useEffect(() => {
     if (state?.endsAt === undefined || !isExpired) return
+    // Never clear before the expiry feedback has actually fired for THIS
+    // `endsAt`. Adjusting a running timer with -30s can land it more than
+    // `EXPIRED_LINGER_SEC` in the past in one step, and clearing on that same
+    // render would remove the row before the effect above ever ran — the
+    // athlete would get no beep at all, which is precisely the "sound stops
+    // working when I use -30s" report. Settings still loading counts as
+    // not-yet-fired, for the same reason.
+    if (settings === undefined || firedForEndsAt.current !== state.endsAt) return
     const secondsSinceExpiry = (Date.now() - new Date(state.endsAt).getTime()) / MS_PER_SEC
     if (secondsSinceExpiry >= EXPIRED_LINGER_SEC) void skip()
-  }, [state, isExpired, remainingSec, skip])
+  }, [state, isExpired, remainingSec, skip, settings])
 
   if (state === undefined) return null
 

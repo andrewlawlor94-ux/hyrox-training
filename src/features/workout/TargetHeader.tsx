@@ -12,6 +12,10 @@ interface TargetHeaderProps {
   recommendation: StrengthRecommendation
   targetReps: number
   onUseTarget: () => void
+  /** Opens this exercise's own adjust-the-workout sheet. Absent when the
+   * instance is frozen — completed history is not adjustable, and a tappable
+   * name that refused to open anything would be worse than a plain one. */
+  onOpenSettings?: () => void
 }
 
 /** 'YYYY-MM-DD' -> 'Jul 20'. Hand-rolled (see SHORT_MONTH_NAMES) rather than
@@ -48,13 +52,45 @@ function repRangeLabel(prescription: InstancePrescription, exercise: Exercise): 
  * one-sentence reason. Never a prefill by itself — `onUseTarget` is the only
  * thing here that writes, and only on an explicit tap.
  */
-export const TargetHeader: FC<TargetHeaderProps> = ({ exercise, prescription, recommendation, targetReps, onUseTarget }) => {
+export const TargetHeader: FC<TargetHeaderProps> = ({ exercise, prescription, recommendation, targetReps, onUseTarget, onOpenSettings }) => {
   const unknownLoad = hasUnknownLoad(exercise, recommendation)
+  const settingsHintId = `${prescription.id}-settings-hint`
 
   return (
     <div className="target-header">
       <div className="target-header__title-row">
-        <h3 className="target-header__name">{exercise.name}</h3>
+        {/* The exercise NAME is the way into its settings (athlete: "make it so
+            I can click an exercise in the workout and get brought to the page to
+            adjust workout specific settings"). A real <button> inside the <h3>
+            rather than a click handler on the heading, so it is reachable by
+            keyboard and announced as a control — the heading itself stays the
+            heading for navigation. */}
+        {/* The button's accessible name is EXACTLY the exercise name, and its
+            purpose is carried by `aria-describedby` instead.
+            `aria-label`/inner text both feed the <h3>'s own accessible name (a
+            heading is named from its descendants), so anything extra in there
+            turned "Back squat" into "Back squat — adjust this exercise": noise
+            for anyone navigating by heading, and it silently broke selectors
+            matching the heading exactly. A DESCRIPTION does not affect naming,
+            which is precisely why it is the right tool here. */}
+        <h3 className="target-header__name">
+          {onOpenSettings === undefined ? exercise.name : (
+            <button
+              type="button"
+              className="target-header__name-button"
+              aria-describedby={settingsHintId}
+              onClick={onOpenSettings}
+            >
+              {exercise.name}
+            </button>
+          )}
+        </h3>
+        {onOpenSettings !== undefined && (
+          <span id={settingsHintId} className="visually-hidden">Opens this exercise&apos;s settings</span>
+        )}
+        {onOpenSettings !== undefined && (
+          <span className="target-header__name-hint" aria-hidden="true">Adjust</span>
+        )}
         <span className="target-header__scheme">{repRangeLabel(prescription, exercise)}</span>
       </div>
       {recommendation.previous && (
