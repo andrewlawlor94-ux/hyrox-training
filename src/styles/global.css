@@ -510,7 +510,7 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .chart-table table { border-collapse: collapse; width: 100%; min-width: 320px; }
 .chart-table th, .chart-table td { text-align: left; padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--border); font-size: var(--font-size-sm); }
 
-.recent-sessions-list ul, .running-progress__stats ul, .running-progress__trajectory ul, .milestone-list__evidence {
+.recent-sessions-list ul, .running-progress__stats ul, .running-progress__trajectory ul {
   list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1);
 }
 .recent-sessions-list__row { padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
@@ -524,13 +524,35 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 
 .personal-bests-card dl { display: grid; grid-template-columns: 1fr auto; gap: var(--space-1) var(--space-3); margin: 0; }
 .personal-bests-card dt { color: var(--text-muted); }
-.personal-bests-card dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.personal-bests-card dd {
+  margin: 0; display: flex; flex-direction: column; align-items: flex-end; overflow-wrap: anywhere;
+}
+.personal-bests-card__value { font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Date under the figure, not in parentheses after it: the number is what the
+   athlete came to read. */
+.personal-bests-card__date { font-size: var(--font-size-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
 .milestone-list { display: flex; flex-direction: column; gap: var(--space-3); }
 .milestone-list__item { display: flex; flex-direction: column; gap: var(--space-1); padding-bottom: var(--space-3); border-bottom: 1px solid var(--border); }
 .milestone-list__item:last-child { border-bottom: none; padding-bottom: 0; }
 .milestone-list__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); flex-wrap: wrap; }
-.milestone-list__evidence { color: var(--text-muted); font-size: var(--font-size-sm); }
+.milestone-list__evidence { display: flex; flex-direction: column; gap: var(--space-1); }
+
+/* Evidence as a value-vs-target comparison rather than a bulleted sentence:
+   marker, metric, then the numbers. `minmax(0, 1fr)` on the label so a long
+   metric name wraps instead of widening the card past the viewport. */
+.evidence-row {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-2);
+  align-items: baseline; font-size: var(--font-size-sm);
+}
+.evidence-row__mark { color: var(--text-muted); font-weight: 700; line-height: 1; }
+.evidence-row__mark--met { color: var(--green); }
+.evidence-row__label { color: var(--text-muted); overflow-wrap: anywhere; }
+/* The athlete's own number is the emphasised one; the target sits beside it,
+   muted, so the comparison reads without the "(target: ...)" parentheses. */
+.evidence-row__numbers { display: flex; flex-wrap: wrap; gap: var(--space-2); justify-content: flex-end; }
+.evidence-row__value { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.evidence-row__target { color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 .running-progress__stats, .running-progress__trajectory { display: flex; flex-direction: column; gap: var(--space-2); }
 .running-progress__no-benchmark { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }

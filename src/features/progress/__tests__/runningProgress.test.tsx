@@ -222,6 +222,37 @@ describe('Progress: running — milestone targets move with the goal', () => {
       expect(after?.textContent).not.toBe(beforeText)
     })
   })
+
+  // The evidence rows were a `<ul>` of "Best 5 km: 24:30 (target: 26:15)" — a
+  // wall of prose across twelve milestones (athlete feedback: "the UI right now
+  // is just text/bullets"). Same numbers, now compared in columns.
+  it('shows each piece of evidence as a value-versus-target comparison, with met status available as text', async () => {
+    await seedTestDb({ withHistory: true })
+    await onboard()
+    await renderRunningProgress()
+
+    const milestoneList = document.querySelector('.milestone-list')
+    if (!milestoneList) throw new Error('expected a .milestone-list element')
+
+    const rows = milestoneList.querySelectorAll('.evidence-row')
+    expect(rows.length).toBeGreaterThan(0)
+
+    for (const row of rows) {
+      // Both numbers present and separated, not fused into a sentence.
+      expect(row.querySelector('.evidence-row__value')?.textContent?.trim()).not.toBe('')
+      expect(row.querySelector('.evidence-row__target')?.textContent).toMatch(/^target /)
+      expect(row.querySelector('.evidence-row__label')?.textContent?.trim()).not.toBe('')
+
+      // Met status is never carried by the glyph alone: the words are always
+      // there for a screen reader, and the glyph itself is aria-hidden.
+      const mark = row.querySelector('.evidence-row__mark')
+      expect(mark?.querySelector('.visually-hidden')?.textContent).toMatch(/^(Met\.|Not yet met\.)$/)
+      expect(mark?.querySelector('[aria-hidden="true"]')).not.toBeNull()
+    }
+
+    // The old parenthetical form is gone.
+    expect(milestoneList.textContent ?? '').not.toMatch(/\(target:/)
+  })
 })
 
 describe('Progress: running — legibility and accessibility at 375px', () => {
