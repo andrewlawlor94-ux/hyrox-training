@@ -109,14 +109,28 @@ export function buildCompromisedRunPrescription(
   }
 }
 
-/** Lower-leg durability work appended to every easy-run template (§8, §19):
+/**
+ * Lower-leg durability work appended to every easy-run template (§8, §19):
  * straight-knee calf raise, bent-knee calf raise, tibialis raise. This is the
  * shin-durability foundation the whole plan's running progression depends
- * on, so it must be present on every easy run, not just some. */
+ * on, so it must be present on every easy run, not just some.
+ *
+ * AFTER the run, deliberately — the spec is explicit ("Lower-leg durability
+ * after every easy run"). These are strengthening sets, not a warm-up: doing
+ * calf and tibialis raises first would pre-fatigue the exact muscles the run
+ * then loads, which is the opposite of what shin-durability work is for.
+ *
+ * Each one carries that as a `notes` string because the ordering was read as a
+ * mis-placed warm-up by the athlete using it — the screen listed the exercises
+ * in order with nothing saying why they came last. The order was right and the
+ * explanation was missing, so the note is the fix, not a reorder.
+ */
+const AFTER_RUN_NOTE = 'Do this after the run, not as a warm-up — these strengthen the lower leg, and doing them first would pre-fatigue it.'
+
 export function lowerLegDurabilityPrescriptions(orderStart: number): SeedPrescription[] {
   return [
-    { exerciseId: 'ex_calf_raise_straight_knee', order: orderStart, sets: 3, repMin: 12, repMax: 15, restSec: positiveRestSec('ex_calf_raise_straight_knee', 45) },
-    { exerciseId: 'ex_calf_raise_bent_knee', order: orderStart + 1, sets: 3, repMin: 12, repMax: 15, restSec: positiveRestSec('ex_calf_raise_bent_knee', 45) },
-    { exerciseId: 'ex_tibialis_raise', order: orderStart + 2, sets: 3, repMin: 15, repMax: 20, restSec: positiveRestSec('ex_tibialis_raise', 45) },
+    { exerciseId: 'ex_calf_raise_straight_knee', order: orderStart, sets: 3, repMin: 12, repMax: 15, restSec: positiveRestSec('ex_calf_raise_straight_knee', 45), notes: AFTER_RUN_NOTE },
+    { exerciseId: 'ex_calf_raise_bent_knee', order: orderStart + 1, sets: 3, repMin: 12, repMax: 15, restSec: positiveRestSec('ex_calf_raise_bent_knee', 45), notes: AFTER_RUN_NOTE },
+    { exerciseId: 'ex_tibialis_raise', order: orderStart + 2, sets: 3, repMin: 15, repMax: 20, restSec: positiveRestSec('ex_tibialis_raise', 45), notes: AFTER_RUN_NOTE },
   ]
 }

@@ -81,6 +81,10 @@ export function structureFor(exercise: Exercise, prescription: InstancePrescript
 
 const ACTIVE_TODAY_STATUSES: readonly WorkoutStatus[] = ['upcoming', 'available']
 const DONE_STATUSES: readonly WorkoutStatus[] = ['completed', 'partiallyCompleted']
+/** Statuses that leave nothing for Today's workout card to offer. Broader than
+ * `DONE_STATUSES`: a skipped or auto-dropped session is not "done", but there is
+ * equally nothing left to start, defer or edit on it. */
+const TERMINAL_TODAY_STATUSES: readonly WorkoutStatus[] = ['completed', 'partiallyCompleted', 'skipped', 'autoDropped']
 
 /** `edit` tracks NOT-frozen: true for `inProgress`/`ACTIVE_TODAY_STATUSES`,
  * false for `DONE_STATUSES` (always frozen -- see `completeWorkout`), since
@@ -114,18 +118,18 @@ function findNextUpcoming(instances: readonly WorkoutInstance[], today: ISODate)
     .sort((a, b) => (a.scheduledDate < b.scheduledDate ? -1 : a.scheduledDate > b.scheduledDate ? 1 : a.sequence - b.sequence))[0]
 }
 
-function restDayVM(): TodaysWorkoutVM {
-  return {
-    kind: 'restDay',
-    name: 'No session scheduled today',
-    phaseLabel: '',
-    structure: [],
-    reason: 'Today is a rest day in the current plan.',
-    actions: actionsFor('autoDropped'),
-  }
-}
-
-function allDoneTodayVM(
+/**
+ * Nothing scheduled today. Still names the next session and offers to pull it
+ * forward: before this, a rest day rendered a sentence and ZERO controls, so an
+ * athlete who opened the app wanting to train had no path at all from Home —
+ * moving a session meant Plan tab -> week -> Edit -> a date input, which the
+ * athlete reported as simply not being able to do it.
+ *
+ * The rest-day framing stays. The plan says rest; this is the athlete
+ * overriding it deliberately, and `moveWorkoutManually` still previews and
+ * warns about recovery conflicts before committing (§15).
+ */
+function restDayVM(
   instances: readonly WorkoutInstance[],
   today: ISODate,
   templatesById: ReadonlyMap<string, WorkoutTemplate>,
@@ -133,22 +137,85 @@ function allDoneTodayVM(
   const next = findNextUpcoming(instances, today)
   const nextName = next ? templatesById.get(next.templateId)?.name : undefined
   return {
-    kind: 'allDoneToday',
-    name: "Today's session is logged",
+    kind: 'restDay',
+    name: 'No session scheduled today',
     phaseLabel: '',
     structure: [],
-    reason: 'Every session scheduled for today has been logged.',
+    reason: 'Today is a rest day in the current plan.',
+    actions: actionsFor('autoDropped'),
+    ...(next && nextName !== undefined
+      ? { pullForward: { instanceId: next.id, name: nextName, scheduledDate: next.scheduledDate } }
+      : {}),
+  }
+}
+
+/**
+ * Nothing left to act on today. `anyAttended` distinguishes the two ways that
+ * happens, because the copy must not claim work was logged when it was skipped:
+ * a genuinely completed day reads "logged", a skipped/dropped one says so.
+ *
+ * Also offers `pullForward`, for the same reason `restDayVM` does — before this,
+ * tapping Skip left a card showing the session's name and ZERO buttons, which is
+ * the same dead end one tap away from the rest-day one.
+ */
+function allDoneTodayVM(args: {
+  instances: readonly WorkoutInstance[]
+  today: ISODate
+  templatesById: ReadonlyMap<string, WorkoutTemplate>
+  anyAttended: boolean
+  /** The engine's own explanation for today, when one of today's sessions was
+   * auto-dropped or moved. Carried through rather than discarded: it is the only
+   * thing that tells the athlete WHY nothing is scheduled ("Optional Zone 2
+   * conditioning session dropped to preserve recovery"), and the spec requires
+   * `queueExplanations` be surfaced verbatim. */
+  adjustmentReason: string | undefined
+}): TodaysWorkoutVM {
+  const { instances, today, templatesById, anyAttended, adjustmentReason } = args
+  const next = findNextUpcoming(instances, today)
+  const nextName = next ? templatesById.get(next.templateId)?.name : undefined
+  return {
+    kind: 'allDoneToday',
+    name: anyAttended ? "Today's session is logged" : 'Nothing left for today',
+    phaseLabel: '',
+    structure: [],
+    reason: anyAttended
+      ? 'Every session scheduled for today has been logged.'
+      : "Today's sessions were skipped or dropped, so there is nothing left to log.",
     actions: actionsFor('completed'),
+    ...(adjustmentReason ? { adjustmentReason } : {}),
     ...(nextName ? { nextUpcomingName: nextName } : {}),
+    ...(next && nextName !== undefined
+      ? { pullForward: { instanceId: next.id, name: nextName, scheduledDate: next.scheduledDate } }
+      : {}),
   }
 }
 
 export function buildTodaysWorkoutVM(input: TodaysWorkoutInput): TodaysWorkoutVM {
   const todays = input.instances.filter((i) => i.scheduledDate === input.today)
-  if (todays.length === 0) return restDayVM()
+  if (todays.length === 0) return restDayVM(input.instances, input.today, input.templatesById)
 
-  const actionable = [...todays].sort((a, b) => a.sequence - b.sequence).find((i) => !wasAttended(i.status))
-  if (!actionable) return allDoneTodayVM(input.instances, input.today, input.templatesById)
+  // "Actionable" means the card can actually offer something. `wasAttended`
+  // alone was not enough: a SKIPPED session is not attended, so it was picked as
+  // actionable and then rendered with every action false — a card showing a
+  // session name and no buttons at all. Terminal statuses are excluded here so
+  // the day falls through to `allDoneTodayVM`, which offers the next session.
+  const actionable = [...todays]
+    .sort((a, b) => a.sequence - b.sequence)
+    .find((i) => !TERMINAL_TODAY_STATUSES.includes(i.status))
+  if (!actionable) {
+    // First explanation among today's own sessions, so a day whose only session
+    // was auto-dropped still says why.
+    const explained = todays.find((i) => (input.explanationByInstanceId.get(i.id) ?? i.adjustmentReason) !== undefined)
+    return allDoneTodayVM({
+      instances: input.instances,
+      today: input.today,
+      templatesById: input.templatesById,
+      anyAttended: todays.some((i) => wasAttended(i.status)),
+      adjustmentReason: explained
+        ? input.explanationByInstanceId.get(explained.id) ?? explained.adjustmentReason
+        : undefined,
+    })
+  }
 
   const template = input.templatesById.get(actionable.templateId)
   const explanation = input.explanationByInstanceId.get(actionable.id) ?? actionable.adjustmentReason

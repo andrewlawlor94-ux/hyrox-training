@@ -261,7 +261,15 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
   list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1);
 }
 .todays-workout-card__reason, .todays-workout-card__adjustment, .todays-workout-card__caution,
-.todays-workout-card__next { margin: 0; }
+.todays-workout-card__next { margin: 0; display: flex; flex-direction: column; gap: 2px; font-weight: 600; }
+.todays-workout-card__next-date { font-size: var(--font-size-sm); font-weight: 400; color: var(--text-muted); }
+/* Set apart from the rest-day sentence above it: this is an override the athlete
+   is choosing, not part of the plan's own statement about today. */
+.todays-workout-card__pull-forward {
+  display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start;
+  padding: var(--space-3); border-radius: var(--radius-control); background: var(--surface-2);
+}
+.todays-workout-card__move-error { margin: 0; color: var(--elevated); font-size: var(--font-size-sm); }
 .todays-workout-card__caution { color: var(--elevated); font-weight: 600; }
 .todays-workout-card__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .this-week-card__next-action { margin: 0; font-weight: 600; }

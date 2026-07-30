@@ -1,9 +1,9 @@
 import type { FC } from 'react'
 import { useId, useState } from 'react'
 import { Button } from '@/components'
-import { moveWorkoutManually, previewMoveConflicts } from '@/data/repositories'
 import type { ISODate } from '@/data/types'
 import { ConflictWarningSheet } from './ConflictWarningSheet'
+import { useMoveWorkout } from './useMoveWorkout'
 
 interface MoveWorkoutControlProps {
   instanceId: string
@@ -14,60 +14,22 @@ interface MoveWorkoutControlProps {
 }
 
 /**
- * "Move to a different day": a plain date input plus a Move button. Moving
- * always previews conflicts first (`previewMoveConflicts`) — an empty result
- * commits immediately, a non-empty one opens `ConflictWarningSheet` naming
- * every specific conflict, with Proceed (still commits — §15: manual moves
- * override hard recovery conflicts but must warn) and Pick another day
- * (cancels, nothing written).
+ * "Move to a different day": a plain date input plus a Move button. The
+ * preview-then-commit flow, including the conflict warning §15 requires, now
+ * lives in `useMoveWorkout` so Home's own move controls share it rather than
+ * reimplementing it — an empty conflict result commits immediately, a non-empty
+ * one opens `ConflictWarningSheet` naming every specific conflict, with Proceed
+ * (still commits: a manual move overrides hard recovery conflicts but must
+ * warn) and Pick another day (cancels, nothing written).
  */
 export const MoveWorkoutControl: FC<MoveWorkoutControlProps> = ({ instanceId, today, onMoved }) => {
   const inputId = useId()
   const [date, setDate] = useState('')
-  const [conflicts, setConflicts] = useState<string[] | null>(null)
-  const [isBusy, setIsBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function commitMove(targetDate: ISODate): Promise<void> {
-    setIsBusy(true)
-    setError(null)
-    try {
-      await moveWorkoutManually({ instanceId, date: targetDate, now: new Date().toISOString(), today })
-      setConflicts(null)
-      setDate('')
-      onMoved?.()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not move this workout.')
-    } finally {
-      setIsBusy(false)
-    }
-  }
-
-  async function handleMoveClick(): Promise<void> {
-    if (!date) return
-    setIsBusy(true)
-    setError(null)
-    try {
-      const found = await previewMoveConflicts({ instanceId, date })
-      if (found.length === 0) {
-        await commitMove(date)
-      } else {
-        setConflicts(found)
-        setIsBusy(false)
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not check this date.')
-      setIsBusy(false)
-    }
-  }
-
-  async function handleProceed(): Promise<void> {
-    await commitMove(date)
-  }
-
-  function handlePickAnotherDay(): void {
-    setConflicts(null)
-  }
+  const move = useMoveWorkout({
+    instanceId,
+    today,
+    onMoved: () => { setDate(''); onMoved?.() },
+  })
 
   return (
     <div className="move-workout-control">
@@ -80,19 +42,18 @@ export const MoveWorkoutControl: FC<MoveWorkoutControlProps> = ({ instanceId, to
         onChange={(event) => { setDate(event.target.value) }}
       />
       <Button
-        variant="secondary" size="sm" disabled={!date || isBusy}
-        onClick={() => { handleMoveClick().catch(() => {}) }}
+        variant="secondary" size="sm" disabled={!date || move.isBusy}
+        onClick={() => { move.request(date).catch(() => {}) }}
       >
         Move
       </Button>
-      {error && <p role="alert" className="move-workout-control__error">{error}</p>}
+      {move.error && <p role="alert" className="move-workout-control__error">{move.error}</p>}
       <ConflictWarningSheet
-        open={conflicts !== null}
-        conflicts={conflicts ?? []}
-        onProceed={() => { handleProceed().catch(() => {}) }}
-        onPickAnotherDay={handlePickAnotherDay}
+        open={move.conflicts !== null}
+        conflicts={move.conflicts ?? []}
+        onProceed={() => { move.proceed().catch(() => {}) }}
+        onPickAnotherDay={move.cancel}
       />
     </div>
   )
 }
-

@@ -42,6 +42,16 @@ export interface TodaysWorkoutVM {
   actions: TodaysWorkoutActions
   /** Name of the next upcoming session, shown when `kind === 'allDoneToday'`. */
   nextUpcomingName?: string
+  /**
+   * The next scheduled session, offered for pulling forward onto today when
+   * nothing at all is scheduled today (`kind === 'restDay'`).
+   *
+   * Kept separate from `instance` on purpose: `instance` is "the session to act
+   * on today", and Home wires Start/Defer/Skip/Completed-earlier straight to it.
+   * Putting a future session there would light up all of those for a day the
+   * athlete has not chosen to train yet. This field grants exactly one action.
+   */
+  pullForward?: { instanceId: string; name: string; scheduledDate: ISODate }
 }
 
 export interface ScheduleRow {

@@ -3,8 +3,12 @@ import { useState } from 'react'
 import type { ISODate, Priority } from '@/data/types'
 import { Button, Card, Chip } from '@/components'
 import type { ChipTone } from '@/components'
+import { Sheet } from '@/components'
 import { CompletedEarlierSheet } from '@/features/workout/CompletedEarlierSheet'
 import { EditPrescriptionSheet } from '@/features/workout/EditPrescriptionSheet'
+import { ConflictWarningSheet } from '@/features/plan/ConflictWarningSheet'
+import { MoveWorkoutControl } from '@/features/plan/MoveWorkoutControl'
+import { useMoveWorkout } from '@/features/plan/useMoveWorkout'
 import type { TodaysWorkoutVM } from './types'
 
 const PRIORITY_TONE: Record<Priority, ChipTone> = { essential: 'accent', important: 'neutral', optional: 'neutral' }
@@ -30,12 +34,27 @@ interface TodaysWorkoutCardProps {
  * own sheet state the same way the "Completed earlier" flow already does.
  * Renders exactly the actions `vm.actions` marks true — never a button with
  * no wired behaviour behind it.
+ *
+ * Two rescheduling controls live here, both routed through `useMoveWorkout` so
+ * they inherit the §15 conflict warning rather than reimplementing it:
+ *
+ * - "Do this today" on a rest day, when `vm.pullForward` names a next session.
+ *   A rest day used to render a sentence and no controls at all, so an athlete
+ *   who wanted to train had no path from Home — rescheduling meant Plan tab ->
+ *   week -> Edit -> a date input, which reads as "I can't move this".
+ * - "Move to another day" on an actionable session, so pushing one back does not
+ *   require that trip either.
  */
 export const TodaysWorkoutCard: FC<TodaysWorkoutCardProps> = ({
   vm, today, disabled, onStart, onContinue, onCompletedEarlier, onDefer, onSkip,
 }) => {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
+  const [moveOpen, setMoveOpen] = useState(false)
+
+  // Called unconditionally (hooks cannot be conditional); `request` no-ops when
+  // there is nothing to pull forward.
+  const pullForward = useMoveWorkout({ instanceId: vm.pullForward?.instanceId, today })
 
   function handleConfirmCompletedEarlier(forDate: ISODate): void {
     setSheetOpen(false)
@@ -90,6 +109,27 @@ export const TodaysWorkoutCard: FC<TodaysWorkoutCardProps> = ({
         <p className="todays-workout-card__next">Next up: {vm.nextUpcomingName}</p>
       )}
 
+      {/* Rest day, but the plan has a next session: name it and offer the one
+          action that makes sense, rather than a dead end. */}
+      {vm.pullForward && (
+        <div className="todays-workout-card__pull-forward">
+          <p className="todays-workout-card__next">
+            Next up: {vm.pullForward.name}
+            <span className="todays-workout-card__next-date">scheduled {vm.pullForward.scheduledDate}</span>
+          </p>
+          <Button
+            variant="secondary"
+            disabled={disabled || pullForward.isBusy}
+            onClick={() => { pullForward.request(today).catch(() => {}) }}
+          >
+            Do this today
+          </Button>
+          {pullForward.error && (
+            <p role="alert" className="todays-workout-card__move-error">{pullForward.error}</p>
+          )}
+        </div>
+      )}
+
       <div className="todays-workout-card__actions">
         {vm.actions.start && <Button disabled={disabled} onClick={onStart}>Start</Button>}
         {vm.actions.continue && <Button disabled={disabled} onClick={onContinue}>Continue</Button>}
@@ -100,6 +140,14 @@ export const TodaysWorkoutCard: FC<TodaysWorkoutCardProps> = ({
         {vm.actions.skip && <Button variant="quiet" disabled={disabled} onClick={onSkip}>Skip</Button>}
         {vm.actions.edit && (
           <Button variant="secondary" disabled={disabled} onClick={() => { setEditOpen(true) }}>Edit</Button>
+        )}
+        {/* Gated on `defer`, which tracks "actionable today" — the same
+            condition that makes rescheduling meaningful. Never offered for a
+            frozen session: `moveWorkoutManually` asserts mutability and would
+            reject it anyway, and offering-then-refusing is worse than not
+            offering. */}
+        {vm.actions.defer && vm.instance && (
+          <Button variant="quiet" disabled={disabled} onClick={() => { setMoveOpen(true) }}>Move to another day</Button>
         )}
       </div>
 
@@ -116,6 +164,23 @@ export const TodaysWorkoutCard: FC<TodaysWorkoutCardProps> = ({
           onClose={() => { setEditOpen(false) }}
         />
       )}
+      {vm.instance && (
+        <Sheet open={moveOpen} onClose={() => { setMoveOpen(false) }} title="Move to another day">
+          <MoveWorkoutControl
+            instanceId={vm.instance.id}
+            today={today}
+            onMoved={() => { setMoveOpen(false) }}
+          />
+        </Sheet>
+      )}
+      {/* The pull-forward flow's own warning. Separate from MoveWorkoutControl's
+          because that one is inside the sheet above and this one is not. */}
+      <ConflictWarningSheet
+        open={pullForward.conflicts !== null}
+        conflicts={pullForward.conflicts ?? []}
+        onProceed={() => { pullForward.proceed().catch(() => {}) }}
+        onPickAnotherDay={pullForward.cancel}
+      />
     </Card>
   )
 }

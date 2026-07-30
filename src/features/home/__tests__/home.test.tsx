@@ -446,4 +446,121 @@ describe('Home: empty and rest-day states', () => {
     expect(within(card).getByText(/session is logged/i)).toBeInTheDocument()
     expect(within(card).queryByRole('button', { name: 'Start' })).toBeNull()
   })
+
+  // A rest day used to render a sentence and ZERO controls, so an athlete who
+  // opened the app wanting to train had no path at all from Home — rescheduling
+  // meant Plan tab -> week -> Edit -> a date input, which reads as "I can't move
+  // this". The rest-day framing stays; the dead end does not.
+  describe('a rest day offers to pull the next session forward', () => {
+    /**
+     * A genuinely empty day. Skipping today's sessions does NOT produce one —
+     * the queue immediately fills the freed day with a later session, which is
+     * correct behaviour. Sunday is the real rest day: automated placement only
+     * ever uses Monday-Saturday (`AUTOMATED_PLACEMENT_WEEKDAYS_PER_WEEK`), so
+     * nothing is ever scheduled on it while real sessions remain ahead.
+     */
+    const SUNDAY: ISODate = '2026-01-11' // the Sunday of seedTestDb's week 1
+
+    async function onSunday(): Promise<void> {
+      vi.setSystemTime(new Date(2026, 0, 11, 8, 0, 0))
+      await syncQueue(SUNDAY)
+    }
+
+    it('names the next session and its scheduled date, instead of a dead end', async () => {
+      await seedTestDb()
+      await onboard()
+      await onSunday()
+
+      await renderHome()
+      const card = await cardFor(/today.s workout/i)
+
+      expect(within(card).getByText(/no session scheduled today/i)).toBeInTheDocument()
+      const pullForward = card.querySelector('.todays-workout-card__pull-forward')
+      expect(pullForward, 'expected a pull-forward block on a rest day').not.toBeNull()
+      expect(pullForward?.textContent).toMatch(/Next up: .+/)
+      expect(pullForward?.textContent).toMatch(/scheduled \d{4}-\d{2}-\d{2}/)
+      expect(within(card).getByRole('button', { name: 'Do this today' })).toBeInTheDocument()
+    })
+
+    it('"Do this today" actually re-dates the session onto today', async () => {
+      await seedTestDb()
+      await onboard()
+      await onSunday()
+
+      await renderHome()
+      const card = await cardFor(/today.s workout/i)
+      const nextName = card.querySelector('.todays-workout-card__next')?.textContent ?? ''
+      expect(nextName).toMatch(/Next up: /)
+
+      await userEvent.click(within(card).getByRole('button', { name: 'Do this today' }))
+
+      // Asserted against the DATABASE row, not the card's own re-render: the
+      // move must actually persist, not merely look like it did.
+      await waitFor(async () => {
+        const moved = (await db.workoutInstances.toArray()).filter((i) => i.scheduledDate === SUNDAY)
+        expect(moved.length).toBeGreaterThan(0)
+      })
+
+      // A pinned override is what makes the move survive the next recompute.
+      const overrides = await db.scheduleOverrides.toArray()
+      expect(overrides.some((o) => o.isPinned && o.date === SUNDAY)).toBe(true)
+    })
+
+    it('offers nothing to pull forward when there genuinely is no next session', async () => {
+      await seedTestDb()
+      await onboard()
+      // Skip EVERY session in the plan, so no upcoming one remains. The card
+      // must fall back to the plain rest-day message rather than inventing a
+      // session or rendering an inert button.
+      const planId = await activePlanId()
+      for (const instance of await db.workoutInstances.where('planId').equals(planId).toArray()) {
+        await skipWorkout({ id: instance.id, now: NOW })
+      }
+      await onSunday()
+
+      await renderHome()
+      const card = await cardFor(/today.s workout/i)
+      expect(within(card).getByText(/no session scheduled today/i)).toBeInTheDocument()
+      expect(card.querySelector('.todays-workout-card__pull-forward')).toBeNull()
+      expect(within(card).queryByRole('button', { name: 'Do this today' })).toBeNull()
+    })
+  })
+
+  // Same dead end as the rest day, one tap away: a SKIPPED session is not
+  // "attended", so it used to be picked as today's actionable session and then
+  // rendered with every action false — a card showing a name and no buttons at
+  // all, and no way to bring anything else forward.
+  it('after skipping today\'s only session, says so accurately and still offers the next one', async () => {
+    await seedTestDb()
+    await onboard()
+    const week1 = await instancesForWeek(1)
+    for (const instance of week1.filter((i) => i.scheduledDate === TODAY)) {
+      await skipWorkout({ id: instance.id, now: NOW })
+    }
+    await syncQueue(TODAY)
+
+    await renderHome()
+    const card = await cardFor(/today.s workout/i)
+
+    // Never claims the work was LOGGED when it was skipped.
+    expect(card.textContent ?? '').not.toMatch(/is logged|has been logged/i)
+    expect(within(card).getByText(/skipped or dropped/i)).toBeInTheDocument()
+
+    // And there is a way forward, rather than a card with no controls.
+    const buttons = [...card.querySelectorAll('button')].map((b) => b.textContent?.trim())
+    expect(buttons.length).toBeGreaterThan(0)
+    expect(buttons).toContain('Do this today')
+  })
+
+  it('offers "Move to another day" for an actionable session, and never for a frozen one', async () => {
+    await seedTestDb()
+    await onboard()
+    await renderHome()
+    const card = await cardFor(/today.s workout/i)
+
+    // Actionable today: the control is offered.
+    await userEvent.click(within(card).getByRole('button', { name: 'Move to another day' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByLabelText('Move to')).toBeInTheDocument()
+  })
 })
