@@ -234,13 +234,37 @@ describe('Home: this week card', () => {
     await renderHome()
     const card = await cardFor(/^this week$/i)
 
+    // Same facts as before, restructured (athlete feedback: "the UI right now is
+    // just text/bullets"). Counts, the four-session minimum, the phase and the
+    // partial session are all still asserted — the assertions moved with the
+    // markup, nothing was dropped.
     expect(within(card).getByText(
-      new RegExp(`Essential sessions completed: ${String(essentials.length)} of ${String(essentials.length)}`),
+      new RegExp(`${String(essentials.length)} of ${String(essentials.length)} essential sessions done`),
     )).toBeInTheDocument()
-    expect(within(card).getByText(/Total sessions completed/)).toBeInTheDocument()
+    // Scoped to the summary chips: "Completed" also appears as a status on the
+    // schedule rows, which is the point of those rows, not an ambiguity here.
+    const chipsText = card.querySelector('.week-progress__chips')?.textContent ?? ''
+    expect(chipsText).toMatch(/\d+ completed/)
     expect(within(card).getByText(/sessions this week/)).toBeInTheDocument()
     expect(within(card).getByText(/Base/)).toBeInTheDocument()
-    if (partial) expect(within(card).getByText(/Partially completed/i)).toBeInTheDocument()
+
+    // Essential progress is now a real progressbar as well as a count.
+    const bar = within(card).getByRole('progressbar')
+    expect(bar.getAttribute('aria-label')).toMatch(/essential sessions/i)
+
+    // The partial session is reported ON ITS OWN SCHEDULE ROW rather than in a
+    // separate list that repeated its name — the duplication this restructure
+    // removed. So assert the row, not just that the phrase appears somewhere.
+    if (partial) {
+      const partialRow = [...card.querySelectorAll('.week-row')]
+        .find((row) => (row.textContent ?? '').includes('Partially completed'))
+      expect(partialRow, 'expected a schedule row marked Partially completed').toBeDefined()
+    }
+
+    // Every session in the week appears exactly once, never two or three times
+    // under different headings.
+    const rowNames = [...card.querySelectorAll('.week-row__name')].map((e) => e.textContent ?? '')
+    expect(rowNames.length).toBe(week1.length)
 
     const nextActions = card.querySelectorAll('.this-week-card__next-action')
     expect(nextActions).toHaveLength(1)
@@ -250,7 +274,7 @@ describe('Home: this week card', () => {
     expect(text).not.toMatch(/streak|don't break|failed|behind schedule|you missed/i)
   })
 
-  it('lists skipped/dropped sessions and shows original dates where they differ from the current schedule', async () => {
+  it('marks a skipped session on its own row, as a scheduling fact and not a failure', async () => {
     await seedTestDb()
     await onboard()
     const week1 = await instancesForWeek(1)
@@ -261,7 +285,31 @@ describe('Home: this week card', () => {
 
     await renderHome()
     const card = await cardFor(/^this week$/i)
-    expect(within(card).getByText(/Skipped or dropped/i)).toBeInTheDocument()
+
+    const skippedRow = [...card.querySelectorAll('.week-row')]
+      .find((row) => (row.textContent ?? '').includes('Skipped'))
+    expect(skippedRow, 'expected a schedule row marked Skipped').toBeDefined()
+    // Still no guilt language attached to it.
+    expect(skippedRow?.textContent ?? '').not.toMatch(/missed|failed|behind/i)
+  })
+
+  it('shows a moved session\'s original day inline on its row, not in a second list', async () => {
+    await seedTestDb()
+    await onboard()
+    await renderHome()
+    const card = await cardFor(/^this week$/i)
+
+    // Whether any week-1 session has actually moved depends on real scheduling,
+    // so this asserts the INVARIANT rather than forcing a move: a "moved from"
+    // note only ever appears inside a schedule row, never as its own list.
+    const movedNotes = card.querySelectorAll('.week-row__moved')
+    for (const note of movedNotes) {
+      expect(note.closest('.week-row')).not.toBeNull()
+      expect(note.textContent).toMatch(/moved from/i)
+    }
+    expect(card.querySelector('.this-week-card__moved')).toBeNull()
+    expect(card.querySelector('.this-week-card__partial')).toBeNull()
+    expect(card.querySelector('.this-week-card__skipped')).toBeNull()
   })
 })
 

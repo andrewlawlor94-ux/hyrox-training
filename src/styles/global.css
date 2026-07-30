@@ -253,8 +253,31 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .todays-workout-card__next { margin: 0; }
 .todays-workout-card__caution { color: var(--elevated); font-weight: 600; }
 .todays-workout-card__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.this-week-card__essential, .this-week-card__total, .this-week-card__minimum { margin: 0; }
 .this-week-card__next-action { margin: 0; font-weight: 600; }
+
+/* This week, restructured to be scanned (see the card's own doc comment: the
+   partial/skipped/moved lists were strict subsets of the schedule, so the same
+   session name printed two or three times). */
+.week-progress { display: flex; flex-direction: column; gap: var(--space-2); }
+.week-progress__label { margin: 0; font-weight: 600; }
+.week-progress__track { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.week-progress__fill { height: 100%; background: var(--accent); border-radius: 999px; }
+.week-progress__chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* One row per session: day, name, status. `minmax(0, 1fr)` on the name column so
+   a long session name wraps instead of widening the row past the viewport, and
+   `align-items: start` so a wrapped name does not drag the chip down with it. */
+.week-row {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-2);
+  align-items: start; padding: var(--space-2) 0; border-bottom: 1px solid var(--border);
+}
+.week-row:last-child { border-bottom: none; }
+.week-row__day {
+  font-size: var(--font-size-sm); font-weight: 600; color: var(--text-muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.week-row__name { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
+.week-row__moved { font-size: var(--font-size-xs); color: var(--text-muted); }
 /* Goal snapshot, laid out to be SCANNED rather than read (athlete feedback:
    "the layout is very text heavy"). Same facts, restructured — see the card's
    own doc comment for the reasoning behind each block. */

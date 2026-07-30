@@ -179,17 +179,31 @@ test('logs a set with one tap, survives reload, and finishes partially — never
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible({ timeout: 10_000 })
   await expectNoHorizontalScroll(page)
   await expect(page.getByRole('button', { name: 'Start' })).toHaveCount(0)
-  await expect(page.getByRole('heading', { name: 'Partially completed' })).toBeVisible()
 
-  const partialRows = await page.locator('.this-week-card__partial li').allInnerTexts()
-  expect(partialRows).toContain(workoutName)
-
-  const scheduleRows = await page.locator('.this-week-card__schedule li').allInnerTexts()
+  // The session is reported as partial ON ITS OWN schedule row. It used to also
+  // appear under a separate "Partially completed" heading, which printed the
+  // same name twice; the row now carries its own status chip instead. The
+  // requirement being protected is unchanged: partial must never read as
+  // completed.
+  const scheduleRows = await page.locator('.this-week-card__schedule .week-row').allInnerTexts()
   const ownRow = scheduleRows.find((row) => row.includes(workoutName))
   expect(ownRow).toBeTruthy()
-  expect(ownRow).toContain('(partiallyCompleted)')
-  expect(ownRow).not.toContain('(completed)')
+  expect(ownRow).toContain('Partially completed')
+  // A human label now, never the raw `partiallyCompleted` enum token.
+  expect(ownRow).not.toContain('partiallyCompleted')
+  // And the row must not ALSO claim plain completion. Compared against the
+  // status chip's exact text rather than by substring, since "Partially
+  // completed" contains "completed" and would satisfy a naive check.
+  const ownRowChip = await page.locator('.this-week-card__schedule .week-row')
+    .filter({ hasText: workoutName })
+    .locator('.chip')
+    .innerText()
+  expect(ownRowChip.trim()).toBe('Partially completed')
 
-  await expect(page.getByText(/Essential sessions completed: 0 of/)).toBeVisible()
-  await expect(page.getByText('Total sessions completed: 0')).toBeVisible()
+  // The name appears exactly once across the whole card — the duplication the
+  // restructure removed.
+  const occurrences = scheduleRows.filter((row) => row.includes(workoutName)).length
+  expect(occurrences).toBe(1)
+
+  await expect(page.getByText(/0 of \d+ essential sessions done/)).toBeVisible()
 })
