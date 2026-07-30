@@ -1,6 +1,7 @@
 export { Card } from './Card'
 export { Button } from './Button'
 export { NumberField } from './NumberField'
+export { DurationField } from './DurationField'
 export { Chip } from './Chip'
 export type { ChipTone } from './Chip'
 export { StatusPill } from './StatusPill'

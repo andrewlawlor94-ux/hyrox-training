@@ -81,10 +81,106 @@ describe('run logging', () => {
     expect(screen.getByLabelText(/notes/i)).toBeInTheDocument()
     expect(screen.getByText('Surface')).toBeInTheDocument()
     expect(screen.getByText('Run type')).toBeInTheDocument()
+    // Surface is genuinely the athlete's own choice — where they ran — so it
+    // stays a picker.
     for (const label of ['Track', 'Treadmill', 'Road', 'Other']) expect(screen.getByText(label)).toBeInTheDocument()
-    for (const label of ['Easy', 'Long', 'Tempo', 'Intervals', 'Compromised', 'Benchmark', 'Race']) {
-      expect(screen.getByText(label)).toBeInTheDocument()
+
+    // The run TYPE is prescribed by the program, so it is stated rather than
+    // offered (athlete: "it should tell me what type to do as it is a
+    // program"). ex_easy_run prescribes Easy, and none of the other six types
+    // is presented as a choice up front.
+    expect(screen.getByText('Easy')).toBeInTheDocument()
+    for (const label of ['Long', 'Tempo', 'Intervals', 'Compromised', 'Benchmark', 'Race']) {
+      expect(screen.queryByText(label), label).toBeNull()
     }
+    // The override exists, but only behind a disclosure.
+    expect(screen.getByRole('button', { name: /ran a different type/i })).toBeInTheDocument()
+  })
+
+  it('states the prescribed run type per exercise, deriving intervals from the prescription itself', async () => {
+    const longRun = await createRunWorkout([{ exerciseId: 'ex_long_run' }])
+    await renderWorkout(longRun)
+    expect(await screen.findByText('Long')).toBeInTheDocument()
+
+    // An interval spec means intervals regardless of which exercise carries it.
+    const intervals = await createRunWorkout([{
+      exerciseId: 'ex_quality_run',
+      intervalSpec: { reps: 4, workDistanceM: 1000, recoverySec: 90 },
+    }])
+    await renderWorkout(intervals)
+    expect(await screen.findByText('Intervals')).toBeInTheDocument()
+  })
+
+  it('lets the athlete record a run that differed from the prescription, and says it differed', async () => {
+    const instanceId = await createRunWorkout([{ exerciseId: 'ex_easy_run' }])
+    await renderWorkout(instanceId)
+
+    fireEvent.change(screen.getByLabelText(/distance/i), { target: { value: '5' } })
+    fireEvent.change(screen.getByLabelText(/duration/i), { target: { value: '22:00' } })
+    fireEvent.blur(screen.getByLabelText(/duration/i))
+
+    fireEvent.click(screen.getByRole('button', { name: /ran a different type/i }))
+    fireEvent.click(await screen.findByRole('radio', { name: 'Tempo' }))
+
+    // Persisted as what was actually run — logging a tempo effort as "easy"
+    // would corrupt Progress's pace-by-run-type comparison.
+    await waitFor(async () => {
+      const logs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
+      expect(logs[0]?.runType).toBe('tempo')
+    })
+    // And the difference from the prescription is shown, not hidden: the
+    // prescribed type stays visible next to what was logged. Scoped to that
+    // row, since "Easy" is also a radio option once the picker is open.
+    const prescribedRow = document.querySelector('.run-block__type-prescribed')
+    expect(prescribedRow?.textContent).toContain('Easy')
+    expect(prescribedRow?.textContent).toContain('Logged as Tempo')
+  })
+
+  it('accepts a duration as mm:ss and normalises what it shows, instead of demanding raw seconds', async () => {
+    const instanceId = await createRunWorkout([{ exerciseId: 'ex_easy_run' }])
+    await renderWorkout(instanceId)
+
+    const durationInput = screen.getByLabelText<HTMLInputElement>(/duration/i)
+    fireEvent.change(screen.getByLabelText(/distance/i), { target: { value: '5' } })
+    fireEvent.change(durationInput, { target: { value: '28:30' } })
+    fireEvent.blur(durationInput)
+
+    await waitFor(async () => {
+      const logs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
+      expect(logs[0]?.durationSec).toBe(28 * 60 + 30)
+    })
+
+    // A bare number means MINUTES, and the field shows how it was read so a
+    // mistyped value is visible rather than silently stored.
+    fireEvent.change(durationInput, { target: { value: '45' } })
+    fireEvent.blur(durationInput)
+    await waitFor(() => { expect(durationInput.value).toBe('45:00') })
+    await waitFor(async () => {
+      const logs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
+      expect(logs[0]?.durationSec).toBe(45 * 60)
+    })
+  })
+
+  it('refuses an unparseable duration rather than committing null and deleting the run', async () => {
+    const instanceId = await createRunWorkout([{ exerciseId: 'ex_easy_run' }])
+    await renderWorkout(instanceId)
+
+    const durationInput = screen.getByLabelText<HTMLInputElement>(/duration/i)
+    fireEvent.change(screen.getByLabelText(/distance/i), { target: { value: '5' } })
+    fireEvent.change(durationInput, { target: { value: '30:00' } })
+    fireEvent.blur(durationInput)
+    await waitFor(async () => {
+      expect(await db.runLogs.where('instanceId').equals(instanceId).count()).toBe(1)
+    })
+
+    fireEvent.change(durationInput, { target: { value: 'half an hour' } })
+    fireEvent.blur(durationInput)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/mm:ss/i)
+    // The junk is neither saved nor treated as "cleared" — the real run stands.
+    const logs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
+    expect(logs).toHaveLength(1)
+    expect(logs[0]?.durationSec).toBe(1800)
   })
 
   it('computes and displays pace live from distance and duration, formatted M:SS/km', async () => {
@@ -94,7 +190,8 @@ describe('run logging', () => {
     const distanceInput = screen.getByLabelText(/distance/i)
     const durationInput = screen.getByLabelText(/duration/i)
     fireEvent.change(distanceInput, { target: { value: '5' } })
-    fireEvent.change(durationInput, { target: { value: '1900' } })
+    fireEvent.change(durationInput, { target: { value: '31:40' } })
+    fireEvent.blur(durationInput)
 
     expect(await screen.findByText(/Pace: 6:20\/km/)).toBeInTheDocument()
   })
@@ -124,7 +221,7 @@ describe('run logging', () => {
     await renderWorkout(instanceId)
 
     fireEvent.change(screen.getByLabelText(/distance/i), { target: { value: '5' } })
-    fireEvent.change(screen.getByLabelText(/duration/i), { target: { value: '1800' } })
+    fireEvent.change(screen.getByLabelText(/duration/i), { target: { value: '30:00' } })
     fireEvent.blur(screen.getByLabelText(/duration/i))
 
     await waitFor(async () => {
@@ -141,7 +238,7 @@ describe('run logging', () => {
     await renderWorkout(instanceId)
 
     fireEvent.change(screen.getByLabelText(/distance/i), { target: { value: '5' } })
-    fireEvent.change(screen.getByLabelText(/duration/i), { target: { value: '0' } })
+    fireEvent.change(screen.getByLabelText(/duration/i), { target: { value: '0:00' } })
     fireEvent.blur(screen.getByLabelText(/duration/i))
 
     // Asserting a NEGATIVE outcome ("no row was written") can't use
@@ -166,7 +263,7 @@ describe('run logging', () => {
     const distanceInput = screen.getByLabelText(/distance/i)
     const durationInput = screen.getByLabelText(/duration/i)
     fireEvent.change(distanceInput, { target: { value: '5' } })
-    fireEvent.change(durationInput, { target: { value: '1800' } })
+    fireEvent.change(durationInput, { target: { value: '30:00' } })
     fireEvent.blur(durationInput)
 
     await waitFor(async () => {
@@ -243,7 +340,7 @@ describe('run logging', () => {
     await renderWorkout(instanceId)
 
     fireEvent.change(screen.getByLabelText('Distance'), { target: { value: '2' } })
-    fireEvent.change(screen.getByLabelText('Duration'), { target: { value: '600' } })
+    fireEvent.change(screen.getByLabelText('Duration'), { target: { value: '10:00' } })
     fireEvent.blur(screen.getByLabelText('Duration'))
 
     await waitFor(async () => {

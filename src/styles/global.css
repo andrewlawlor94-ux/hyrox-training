@@ -55,6 +55,7 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .number-field__input { width: 100%; min-height: var(--tap-min); border: 1px solid var(--border); border-radius: var(--radius-control); padding: 0 var(--space-3); background: var(--bg); color: var(--text); }
 .number-field__input--with-unit { padding-right: var(--space-6); }
 .number-field__unit { position: absolute; right: var(--space-3); color: var(--text-muted); font-size: var(--font-size-sm); pointer-events: none; }
+.number-field__error { margin: 0; color: var(--elevated); font-size: var(--font-size-sm); }
 
 /* ---------- Chip / StatusPill (tone is always paired with text) ---------- */
 .chip { display: inline-flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-3); border-radius: var(--radius-control); font-size: var(--font-size-xs); font-weight: 600; line-height: 1.2; }
@@ -421,6 +422,17 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .run-block__goal-pace { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
 .run-block__fields { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .run-block__fields .number-field { flex: 1 1 120px; min-width: 100px; }
+
+/* Run type stated as an instruction, not offered as a choice. */
+.run-block__type { display: flex; flex-direction: column; gap: var(--space-2); }
+.run-block__type-prescribed { margin: 0; display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.run-block__type-label { font-size: var(--font-size-sm); font-weight: 600; color: var(--text-muted); }
+/* A quiet, self-labelling escape hatch. Full tap height so it is not a
+   cramped target next to the chips it sits under. */
+.run-block__type-toggle {
+  align-self: flex-start; background: none; border: none; padding: 0;
+  min-height: var(--tap-min); color: var(--accent); font-weight: 600; text-align: left;
+}
 
 .interval-splits-editor { display: flex; flex-direction: column; gap: var(--space-3); border-top: 1px solid var(--border); padding-top: var(--space-3); }
 .interval-splits-editor__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }

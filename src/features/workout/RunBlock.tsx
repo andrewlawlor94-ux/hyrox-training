@@ -1,7 +1,7 @@
 import type { ChangeEvent, FC } from 'react'
 import { useState } from 'react'
 import type { IntervalSplit, RunLog, RunType, Surface } from '@/data/types'
-import { Card, NumberField, SegmentedControl } from '@/components'
+import { Card, Chip, DurationField, NumberField, SegmentedControl } from '@/components'
 import { deleteRunLog, saveRunLog } from '@/data/repositories'
 import { isPositiveFinite, paceSecPerKm } from '@/domain/pace/pace'
 import { splitPaceSecPerKm } from '@/domain/pace/intervals'
@@ -15,9 +15,18 @@ import type { RunExerciseVM } from './useWorkout'
 const DEFAULT_SURFACE: Surface = 'road'
 const M_PER_KM = 1000
 
-function defaultRunType(item: RunExerciseVM): RunType {
+/**
+ * The run type the PROGRAM prescribes for this session, derived from the
+ * prescription itself (an interval spec means intervals) or from the seeded
+ * exercise. This is a plan fact, not a preference.
+ */
+function prescribedRunType(item: RunExerciseVM): RunType {
   if (item.prescription.intervalSpec) return 'intervals'
   return DEFAULT_RUN_TYPE_BY_EXERCISE_ID[item.exercise.id] ?? 'easy'
+}
+
+function runTypeLabel(type: RunType): string {
+  return RUN_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type
 }
 
 /**
@@ -53,13 +62,22 @@ function toIntervalSplits(runLogId: string, drafts: DraftSplit[]): IntervalSplit
  * `paceSource: 'goalRacePace'` prescription shows the goal-derived target
  * pace resolved by `useWorkout` — re-derived from the active goal, so
  * changing the goal in Settings changes what renders here on the next read.
+ *
+ * Duration is entered as mm:ss via `DurationField`, and the run type is stated
+ * as what the program prescribes rather than offered as a free choice — see
+ * those two blocks below for the reasoning.
  */
 export const RunBlock: FC<{ item: RunExerciseVM }> = ({ item }) => {
   const { prescription, exercise, log, splits, goalTargetPaceSecPerKm } = item
   const [distanceKm, setDistanceKm] = useState<number | null>(log?.distanceKm ?? (prescription.distanceM ? prescription.distanceM / M_PER_KM : null))
   const [durationSec, setDurationSec] = useState<number | null>(log?.durationSec ?? prescription.durationSec ?? null)
   const [surface, setSurface] = useState<Surface>(log?.surface ?? DEFAULT_SURFACE)
-  const [runType, setRunType] = useState<RunType>(log?.runType ?? defaultRunType(item))
+  const prescribed = prescribedRunType(item)
+  const [runType, setRunType] = useState<RunType>(log?.runType ?? prescribed)
+  // Closed unless what was actually run differs from what was prescribed, so
+  // the normal case reads as an instruction and only a genuine deviation shows
+  // the picker already open.
+  const [showTypeOverride, setShowTypeOverride] = useState(runType !== prescribed)
   const [notes, setNotes] = useState(log?.notes ?? '')
   const [draftSplits, setDraftSplits] = useState<DraftSplit[]>([])
   const autosave = useAutosave()
@@ -128,11 +146,52 @@ export const RunBlock: FC<{ item: RunExerciseVM }> = ({ item }) => {
       <div className="run-block__fields">
         <NumberField id={`run-distance-${prescription.id}`} label="Distance" unit="km" value={distanceKm} onBlur={handleBlur}
           onChange={(v) => { setDistanceKm(v); scheduleSave({ distanceKm: v }) }} />
-        <NumberField id={`run-duration-${prescription.id}`} label="Duration" unit="s" value={durationSec} onBlur={handleBlur}
-          onChange={(v) => { setDurationSec(v); scheduleSave({ durationSec: v }) }} />
+        {/* Minutes and seconds, not a raw seconds count. `DurationField` commits
+            on blur, so `handleBlur`'s flush is redundant for it — the commit
+            below schedules and flushes in one go. */}
+        <DurationField
+          id={`run-duration-${prescription.id}`}
+          label="Duration"
+          valueSec={durationSec}
+          onCommit={(v) => {
+            setDurationSec(v)
+            scheduleSave({ durationSec: v })
+            void autosave.flushKey(prescription.id)
+          }}
+        />
       </div>
       <SegmentedControl label="Surface" value={surface} onChange={(v) => { setSurface(v); scheduleSave({ surface: v }) }} options={SURFACE_OPTIONS} />
-      <SegmentedControl label="Run type" value={runType} onChange={(v) => { setRunType(v); scheduleSave({ runType: v }) }} options={RUN_TYPE_OPTIONS} />
+
+      {/* The run type is PRESCRIBED, not chosen (athlete: "it should tell me what
+          type to do as it is a program"). Stated as an instruction, with the
+          picker behind a disclosure for the case where what was actually run
+          differed — dropping the override entirely would force the log to claim
+          an easy run when the athlete ran a tempo, which corrupts Progress's
+          pace-by-run-type comparison. */}
+      <div className="run-block__type">
+        <p className="run-block__type-prescribed">
+          <span className="run-block__type-label">Run type</span>
+          <Chip tone="accent">{runTypeLabel(prescribed)}</Chip>
+          {runType !== prescribed && <Chip tone="caution">{`Logged as ${runTypeLabel(runType)}`}</Chip>}
+        </p>
+        {!showTypeOverride && (
+          <button
+            type="button"
+            className="run-block__type-toggle"
+            onClick={() => { setShowTypeOverride(true) }}
+          >
+            Ran a different type?
+          </button>
+        )}
+        {showTypeOverride && (
+          <SegmentedControl
+            label="Log this run as"
+            value={runType}
+            onChange={(v) => { setRunType(v); scheduleSave({ runType: v }) }}
+            options={RUN_TYPE_OPTIONS}
+          />
+        )}
+      </div>
 
       <IntervalSplitsEditor idPrefix={`run-${prescription.id}`} intervalSpec={prescription.intervalSpec} initialSplits={splits} onChange={handleSplitsChange} />
 

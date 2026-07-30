@@ -124,3 +124,37 @@ export function parseRaceTime(text: string): number | null {
   if (a > TWO_PART_HOUR_THRESHOLD) return a * SEC_PER_MIN + b
   return a * SEC_PER_HOUR + b * SEC_PER_MIN
 }
+
+/**
+ * Parses a workout DURATION into whole seconds: 'MM:SS', 'H:MM:SS', or a bare
+ * number of minutes. Returns `null` for anything else.
+ *
+ * Deliberately NOT `parseRaceTime`, whose two-part form resolves to H:MM below
+ * `TWO_PART_HOUR_THRESHOLD` — correct for a race clock, wrong here: an athlete
+ * typing '28:30' for a run means 28 minutes 30 seconds, never 28 hours 30
+ * minutes. Two parts are therefore ALWAYS MM:SS.
+ *
+ * A bare number is read as MINUTES ('45' -> 45 min), because that is how a
+ * prescribed run is written and spoken ("45 minute easy run"). Seconds are not
+ * range-checked: '2:90' is accepted as 3 min 30 s rather than rejected, since
+ * the athlete's intent is unambiguous and refusing it would be pedantry.
+ */
+export function parseDuration(text: string): number | null {
+  const trimmed = text.trim()
+  if (trimmed === '') return null
+  const parts = trimmed.split(':')
+  if (parts.length > RACE_TIME_MAX_PARTS) return null
+  if (parts.some((p) => !isValidTimePart(p))) return null
+  const nums = parts.map((p) => Number.parseInt(p, 10))
+
+  if (nums.length === RACE_TIME_MAX_PARTS) {
+    const [h, m, s] = nums as [number, number, number]
+    return h * SEC_PER_HOUR + m * SEC_PER_MIN + s
+  }
+  if (nums.length === 2) {
+    const [m, s] = nums as [number, number]
+    return m * SEC_PER_MIN + s
+  }
+  const [minutes] = nums as [number]
+  return minutes * SEC_PER_MIN
+}
