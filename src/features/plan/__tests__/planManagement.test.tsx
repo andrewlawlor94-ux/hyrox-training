@@ -100,6 +100,37 @@ describe('plan-level operations', () => {
     expect(await db.workoutInstances.get('wi_1')).toEqual(frozenBefore)
   })
 
+  // "Create new plan from scratch" was wired but had no test and no manual
+  // verification (flagged in the Task 27 report). It archives the current plan
+  // and installs a fresh one, which is exactly the shape of operation that
+  // could quietly take the athlete's logged training with it.
+  it('creates a new plan from scratch, archiving the old one without touching its completed history', async () => {
+    const frozenBefore = await db.workoutInstances.get('wi_1')
+    expect(frozenBefore?.frozen).toBe(true)
+    const dialog = await openPlanManager()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create new plan from scratch' }))
+
+    await waitFor(async () => {
+      const plans = await db.plans.toArray()
+      const active = plans.filter((p) => p.status === 'active')
+      expect(active).toHaveLength(1)
+      expect(active[0]?.id).not.toBe(PLAN_ID)
+    })
+
+    // The previous plan is ARCHIVED, never deleted — so this is recoverable via
+    // "Make active" rather than a one-way door.
+    expect((await db.plans.get(PLAN_ID))?.status).toBe('archived')
+    // And its completed session is byte-identical: the old plan's history is
+    // not re-dated, re-parented, or discarded by installing a new plan.
+    expect(await db.workoutInstances.get('wi_1')).toEqual(frozenBefore)
+    // Settings points at the new plan, so the app is not left referencing an
+    // archived one.
+    const activePlanId = (await db.settings.get('app'))?.activePlanId
+    expect(activePlanId).toBeDefined()
+    expect((await db.plans.get(activePlanId ?? ''))?.status).toBe('active')
+  })
+
   it('resets automated schedule recommendations, preserving completed history', async () => {
     const dialog = await openPlanManager()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Reset schedule recommendations' }))
