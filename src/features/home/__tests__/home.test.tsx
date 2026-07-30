@@ -266,19 +266,45 @@ describe('Home: this week card', () => {
 })
 
 describe('Home: goal snapshot card', () => {
-  it('shows race date, target time, plan week, a trajectory pill, and non-empty evidence naming specific milestones', async () => {
+  // The card was restructured to be scanned rather than read (athlete feedback:
+  // "the layout is very text heavy"). Every fact it carried before is still
+  // asserted here — the assertions moved with the markup, nothing was dropped.
+  it('shows the countdown, race date, target time, plan week, a trajectory pill, and non-empty evidence', async () => {
     await seedTestDb()
     await onboard()
     await renderHome()
     const card = await cardFor(/goal snapshot/i)
 
-    expect(within(card).getByText(/Race date: 2026-06-15/)).toBeInTheDocument()
-    expect(within(card).getByText(/Target time:/)).toBeInTheDocument()
-    expect(within(card).getByText(/Plan week 1 of/)).toBeInTheDocument()
+    // Countdown, in place of a date the athlete has to subtract from today.
+    // seedTestDb's fixture is today 2026-01-05 -> race 2026-06-15 = 161 days.
+    expect(within(card).getByText('161 days')).toBeInTheDocument()
+    // The date itself is still present, alongside the countdown rather than
+    // instead of it.
+    expect(within(card).getByText(/2026-06-15/)).toBeInTheDocument()
+    expect(within(card).getByText(/target time/i)).toBeInTheDocument()
+    expect(within(card).getByText(/Week 1 of/)).toBeInTheDocument()
 
-    const evidence = card.querySelectorAll('.goal-snapshot-card__evidence li')
+    // Plan position is now a real progressbar as well as a number, so the
+    // percentage is announced rather than duplicated as a second line of text
+    // (two adjacent figures read as "274%").
+    const bar = within(card).getByRole('progressbar')
+    expect(bar).toHaveAttribute('aria-valuenow')
+    expect(bar.getAttribute('aria-label')).toMatch(/plan progress/i)
+    const fill = card.querySelector<HTMLElement>('.goal-progress__fill')
+    expect(fill).not.toBeNull()
+    // A real width, never NaN% (which renders as a silently full bar).
+    expect(fill?.style.width).toMatch(/^\d+%$/)
+
+    // Each readiness status keeps its own TEXT label, not colour alone.
+    for (const label of ['Running', 'Strength', 'Symptoms']) {
+      expect(within(card).getByText(label)).toBeInTheDocument()
+    }
+
+    // The evidence is still there in full, behind a native disclosure.
+    const evidence = card.querySelectorAll('.goal-evidence__list li')
     expect(evidence.length).toBeGreaterThan(0)
     for (const li of evidence) expect(li.textContent).not.toBe('')
+    expect(within(card).getByText('Why this outlook')).toBeInTheDocument()
   })
 
   it('shows no predicted finishing time and says so plainly when benchmark data is insufficient', async () => {
@@ -287,8 +313,8 @@ describe('Home: goal snapshot card', () => {
     await renderHome()
     const card = await cardFor(/goal snapshot/i)
 
-    expect(card.querySelector('.goal-snapshot-card__estimate')).toBeNull()
-    const message = card.querySelector('.goal-snapshot-card__no-estimate')
+    expect(card.querySelector('.goal-outlook__estimate')).toBeNull()
+    const message = card.querySelector('.goal-outlook__no-estimate')
     expect(message).not.toBeNull()
     expect(message?.textContent).toMatch(/not enough benchmark data/i)
   })
@@ -324,9 +350,9 @@ describe('Home: goal snapshot card', () => {
     const card = await cardFor(/goal snapshot/i)
 
     await waitFor(() => {
-      expect(card.querySelector('.goal-snapshot-card__estimate')).not.toBeNull()
+      expect(card.querySelector('.goal-outlook__estimate')).not.toBeNull()
     })
-    expect(card.querySelector('.goal-snapshot-card__no-estimate')).toBeNull()
+    expect(card.querySelector('.goal-outlook__no-estimate')).toBeNull()
     expect(card.textContent).toMatch(/estimate/i)
     expect(card.textContent).toMatch(/–/) // en dash range separator
   })

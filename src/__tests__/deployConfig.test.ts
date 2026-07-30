@@ -193,6 +193,10 @@ describe('deploy workflow (.github/workflows/deploy.yml)', () => {
     const lintIdx = indexOf('Lint')
     const typecheckIdx = indexOf('Typecheck')
     const testIdx = indexOf('Unit and component tests')
+    // The e2e suite gates the deploy too: it covers exactly the browser-level
+    // behaviour a green unit suite has repeatedly missed on this project.
+    const browserInstallIdx = indexOf('Install Playwright browser')
+    const e2eIdx = indexOf('End-to-end tests')
     const buildIdx = indexOf('Build')
     const configurePagesIdx = indexOf('actions/configure-pages@v5')
     const uploadArtifactIdx = indexOf('actions/upload-pages-artifact@v3')
@@ -200,7 +204,10 @@ describe('deploy workflow (.github/workflows/deploy.yml)', () => {
     expect(lintIdx).toBeGreaterThanOrEqual(0)
     expect(typecheckIdx).toBeGreaterThan(lintIdx)
     expect(testIdx).toBeGreaterThan(typecheckIdx)
-    expect(buildIdx).toBeGreaterThan(testIdx)
+    // The browser has to be installed before the suite that drives it.
+    expect(browserInstallIdx).toBeGreaterThan(testIdx)
+    expect(e2eIdx).toBeGreaterThan(browserInstallIdx)
+    expect(buildIdx).toBeGreaterThan(e2eIdx)
     expect(configurePagesIdx).toBeGreaterThan(buildIdx)
     expect(uploadArtifactIdx).toBeGreaterThan(configurePagesIdx)
 

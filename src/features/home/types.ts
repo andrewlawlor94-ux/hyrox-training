@@ -68,6 +68,11 @@ export interface StatusChip {
 
 export interface GoalSnapshotVM {
   raceDate: ISODate
+  /** Whole days from today to race day. Negative once the race has passed, so
+   * the card can say "race day was N days ago" rather than a nonsense
+   * countdown. Derived here rather than in the component so the card stays
+   * purely presentational and clock-free. */
+  daysToRace: number
   targetSeconds: number
   currentWeek: number
   totalWeeks: number

@@ -118,7 +118,7 @@ async function loadHomeData(today: ISODate): Promise<HomeViewModel> {
     week: buildThisWeekVM({
       weekNumber: currentWeek, phaseLabel: phaseLabelByWeek.get(currentWeek) ?? '', weekInstances, namesByInstanceId,
     }),
-    goal: buildGoalSnapshotVM({ raceDate: goal.raceDate, targetSeconds: goal.targetSeconds, facts, milestones, trajectory, estimate }),
+    goal: buildGoalSnapshotVM({ today, raceDate: goal.raceDate, targetSeconds: goal.targetSeconds, facts, milestones, trajectory, estimate }),
   }
 }
 

@@ -40,6 +40,33 @@ jobs:
       - name: Unit and component tests
         run: npm run test:run
 
+      # Browser-level tests, which the unit suite cannot cover: one-tap set
+      # logging read back from IndexedDB, a real reload mid-session, the backup
+      # round trip, offline/installability, and the mobile layout and
+      # accessibility audits at 375px. They gate the deploy because every one of
+      # them guards something a green unit suite has already been observed to
+      # miss on this project.
+      #
+      # `--with-deps` installs the OS libraries Chromium needs on the runner;
+      # `chromium` alone (not `playwright install`) keeps it to the one browser
+      # this suite actually targets rather than downloading three.
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      # playwright.config.ts's own webServer runs `npm run build && npm run
+      # preview`, so this exercises a real production bundle. VITE_BASE is set
+      # there (BASE_PATH), deliberately independent of the deploy build below.
+      - name: End-to-end tests
+        run: npm run e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          retention-days: 7
+
       # The app is served from https://<user>.github.io/<repo>/, so every asset
       # URL, the service worker scope, and the web app manifest must carry the
       # repository subpath. Deriving it from the repo name keeps a rename working.

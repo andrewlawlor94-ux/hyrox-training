@@ -2,6 +2,7 @@ import type { ChipTone } from '@/components'
 import type {
   Exercise, ISODate, InstancePrescription, Priority, RecoveryTag, WorkoutInstance, WorkoutStatus, WorkoutTemplate,
 } from '@/data/types'
+import { daysBetween } from '@/domain/dates'
 import { formatDistanceM, formatDuration } from '@/domain/units/format'
 import type { MilestoneResult, MilestoneStatus } from '@/domain/milestones/evaluate'
 import type { MilestoneFacts } from '@/domain/milestones/evaluate'
@@ -252,6 +253,7 @@ function missingBenchmarkParts(facts: MilestoneFacts): string[] {
 }
 
 export interface GoalSnapshotInput {
+  today: ISODate
   raceDate: ISODate
   targetSeconds: number
   facts: MilestoneFacts
@@ -266,6 +268,7 @@ export function buildGoalSnapshotVM(input: GoalSnapshotInput): GoalSnapshotVM {
 
   return {
     raceDate: input.raceDate,
+    daysToRace: daysBetween(input.today, input.raceDate),
     targetSeconds: input.targetSeconds,
     currentWeek: facts.currentWeek,
     totalWeeks: facts.totalWeeks,

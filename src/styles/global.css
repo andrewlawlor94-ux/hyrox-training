@@ -246,7 +246,7 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .todays-workout-card__phase, .this-week-card__phase, .goal-snapshot-card__week { margin: 0; color: var(--text-muted); }
 .todays-workout-card__meta { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin: 0; }
 .todays-workout-card__structure, .this-week-card__schedule ul, .this-week-card__partial ul,
-.this-week-card__skipped ul, .this-week-card__moved ul, .goal-snapshot-card__evidence {
+.this-week-card__skipped ul, .this-week-card__moved ul, .goal-evidence__list {
   list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1);
 }
 .todays-workout-card__reason, .todays-workout-card__adjustment, .todays-workout-card__caution,
@@ -255,9 +255,51 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .todays-workout-card__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .this-week-card__essential, .this-week-card__total, .this-week-card__minimum { margin: 0; }
 .this-week-card__next-action { margin: 0; font-weight: 600; }
-.goal-snapshot-card__race-date, .goal-snapshot-card__target, .goal-snapshot-card__running,
-.goal-snapshot-card__strength, .goal-snapshot-card__symptoms, .goal-snapshot-card__trajectory,
-.goal-snapshot-card__estimate, .goal-snapshot-card__no-estimate { margin: 0; }
+/* Goal snapshot, laid out to be SCANNED rather than read (athlete feedback:
+   "the layout is very text heavy"). Same facts, restructured — see the card's
+   own doc comment for the reasoning behind each block. */
+
+/* Two-up hero: the countdown and the target time, the two numbers worth reading
+   first. `minmax(0, 1fr)` rather than `1fr` so a long value shrinks instead of
+   forcing the grid wider than the viewport. */
+.goal-hero { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+.goal-hero__item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.goal-hero__value { font-size: var(--font-size-2xl); font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.goal-hero__label { font-size: var(--font-size-sm); color: var(--text-muted); }
+
+/* Plan position as a bar: "week 6 of 27" is a fact you have to do arithmetic on. */
+.goal-progress { display: flex; flex-direction: column; gap: var(--space-1); }
+.goal-progress__label { margin: 0; font-weight: 600; }
+.goal-progress__track { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.goal-progress__fill { height: 100%; background: var(--accent); border-radius: 999px; }
+
+/* Three readiness statuses as a grid of label + chip, not three prose lines.
+   88px, not 96px: measured at 375px the card's content box is 301px, so three
+   96px tracks plus two 8px gaps came to 304px and `auto-fit` silently dropped
+   to two columns, orphaning "Symptoms" on its own row. 3 x 88 + 16 = 280 fits,
+   so all three read in one glance. `auto-fit` still collapses gracefully if the
+   card ever gets narrower. */
+.goal-readiness { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: var(--space-2); }
+.goal-readiness__item {
+  display: flex; flex-direction: column; gap: var(--space-1); align-items: flex-start;
+  min-width: 0; padding: var(--space-2); border-radius: var(--radius-control); background: var(--surface-2);
+}
+.goal-readiness__label { font-size: var(--font-size-sm); color: var(--text-muted); font-weight: 600; }
+
+.goal-outlook { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; }
+.goal-outlook__estimate { margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.goal-outlook__range { font-size: var(--font-size-lg); font-weight: 700; font-variant-numeric: tabular-nums; }
+.goal-outlook__caveat, .goal-outlook__no-estimate { font-size: var(--font-size-sm); color: var(--text-muted); margin: 0; }
+
+/* The evidence was the bulk of the card's text and is reference material, not a
+   headline. `<details>` is native, so it stays keyboard-operable and
+   screen-reader-announced without a custom disclosure widget. */
+.goal-evidence { border-top: 1px solid var(--border); padding-top: var(--space-2); }
+.goal-evidence__summary {
+  display: flex; align-items: center; min-height: var(--tap-min); cursor: pointer;
+  font-weight: 600; color: var(--accent);
+}
+.goal-evidence__list { margin-top: var(--space-2); color: var(--text-muted); font-size: var(--font-size-sm); }
 
 /* ---------- Onboarding (race date -> profile -> goal) ---------- */
 /* Rendered OUTSIDE AppShell (onboarding is a sibling route; BootGate returns
