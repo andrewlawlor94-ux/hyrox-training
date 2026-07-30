@@ -245,6 +245,17 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .todays-workout-card__name { font-size: var(--font-size-xl); font-weight: 700; margin: 0; }
 .todays-workout-card__phase, .this-week-card__phase, .goal-snapshot-card__week { margin: 0; color: var(--text-muted); }
 .todays-workout-card__meta { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin: 0; }
+
+/* Exercise and dose as two aligned columns, so the doses line up down the page
+   instead of each sitting mid-sentence after its own exercise name. */
+.exercise-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2);
+  align-items: baseline; padding: var(--space-1) 0;
+}
+.exercise-row__name { overflow-wrap: anywhere; }
+.exercise-row__detail {
+  font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-muted);
+}
 .todays-workout-card__structure, .this-week-card__schedule ul, .this-week-card__partial ul,
 .this-week-card__skipped ul, .this-week-card__moved ul, .goal-evidence__list {
   list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1);

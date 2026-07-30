@@ -9,7 +9,7 @@ import type { MilestoneFacts } from '@/domain/milestones/evaluate'
 import type { MilestoneKey } from '@/domain/milestones/constants'
 import type { TrajectoryResult, RaceEstimate } from '@/domain/milestones/trajectory'
 import { ATTENDED_STATUSES, WEEKLY_SESSION_MINIMUM } from './constants'
-import type { GoalSnapshotVM, ScheduleRow, StatusChip, ThisWeekVM, TodaysWorkoutVM } from './types'
+import type { ExerciseStructure, GoalSnapshotVM, ScheduleRow, StatusChip, ThisWeekVM, TodaysWorkoutVM } from './types'
 
 function wasAttended(status: WorkoutStatus): boolean {
   return (ATTENDED_STATUSES as readonly string[]).includes(status)
@@ -30,17 +30,34 @@ const RECOVERY_TAG_PHRASE: Record<RecoveryTag, string> = {
   raceSimulation: 'a race-simulation session',
 }
 
-/** Plain-language reason a session is recommended today, grounded in its
- * actual recovery tag and priority — never a generic placeholder. */
-export function reasonForToday(priority: Priority, tags: readonly RecoveryTag[]): string {
+/**
+ * Plain-language reason a session is recommended today, grounded in its actual
+ * recovery tag — never a generic placeholder.
+ *
+ * Deliberately no longer appends "— priority: essential": the card renders the
+ * priority as its own chip directly above this sentence, so that tail printed
+ * the same fact twice. `priority` stays in the signature (unused, hence the
+ * underscore) because every caller passes it and a future phrasing may want it.
+ */
+export function reasonForToday(_priority: Priority, tags: readonly RecoveryTag[]): string {
   const primaryTag = tags[0]
   const phrase = primaryTag ? RECOVERY_TAG_PHRASE[primaryTag] : 'the next session in the plan'
-  return `Scheduled for today as ${phrase} — priority: ${priority}.`
+  return `Scheduled for today as ${phrase}.`
 }
 
-/** One-line description of a prescription's exercise/run/station structure,
- * e.g. "Back squat: 4 x 5" or "Easy run: 5.0 km". */
-export function structureLineFor(exercise: Exercise, prescription: InstancePrescription): string {
+/**
+ * A prescription's structure split into the exercise and its dose — `{ name:
+ * 'Back squat', detail: '4 x 5' }` — rather than the single "Back squat: 4 x 5"
+ * string this used to return.
+ *
+ * Every branch below already produced exactly `name: detail`, so this carries
+ * the same information; returning the pair lets the card align the two as
+ * columns instead of rendering a run of prose lines. `detail` is `''` when the
+ * prescription has no dose at all, which the card renders as just the name.
+ */
+export function structureFor(exercise: Exercise, prescription: InstancePrescription): ExerciseStructure {
+  const of = (detail: string): ExerciseStructure => ({ name: exercise.name, detail })
+
   if (exercise.measurementType === 'strengthSets') {
     const sets = prescription.sets ?? exercise.defaultSets ?? 0
     const repMin = prescription.repMin ?? exercise.repMin
@@ -48,18 +65,18 @@ export function structureLineFor(exercise: Exercise, prescription: InstancePresc
     const repRange = repMin !== undefined && repMax !== undefined && repMin !== repMax
       ? `${String(repMin)}-${String(repMax)}`
       : String(repMin ?? repMax ?? '')
-    return `${exercise.name}: ${String(sets)} x ${repRange}`
+    return of(`${String(sets)} x ${repRange}`)
   }
   if (prescription.intervalSpec) {
     const spec = prescription.intervalSpec
     const work = spec.workDistanceM !== undefined
       ? formatDistanceM(spec.workDistanceM)
       : spec.workSec !== undefined ? formatDuration(spec.workSec) : ''
-    return `${exercise.name}: ${String(spec.reps)} x ${work}`
+    return of(`${String(spec.reps)} x ${work}`)
   }
-  if (prescription.distanceM !== undefined) return `${exercise.name}: ${formatDistanceM(prescription.distanceM)}`
-  if (prescription.durationSec !== undefined) return `${exercise.name}: ${formatDuration(prescription.durationSec)}`
-  return exercise.name
+  if (prescription.distanceM !== undefined) return of(formatDistanceM(prescription.distanceM))
+  if (prescription.durationSec !== undefined) return of(formatDuration(prescription.durationSec))
+  return of('')
 }
 
 const ACTIVE_TODAY_STATUSES: readonly WorkoutStatus[] = ['upcoming', 'available']
@@ -86,7 +103,7 @@ export interface TodaysWorkoutInput {
   instances: readonly WorkoutInstance[]
   templatesById: ReadonlyMap<string, WorkoutTemplate>
   phaseLabelByWeek: ReadonlyMap<number, string>
-  structureLinesByInstanceId: ReadonlyMap<string, string[]>
+  structureByInstanceId: ReadonlyMap<string, ExerciseStructure[]>
   explanationByInstanceId: ReadonlyMap<string, string>
   symptomCaution: string | undefined
 }
@@ -102,7 +119,7 @@ function restDayVM(): TodaysWorkoutVM {
     kind: 'restDay',
     name: 'No session scheduled today',
     phaseLabel: '',
-    structureLines: [],
+    structure: [],
     reason: 'Today is a rest day in the current plan.',
     actions: actionsFor('autoDropped'),
   }
@@ -119,7 +136,7 @@ function allDoneTodayVM(
     kind: 'allDoneToday',
     name: "Today's session is logged",
     phaseLabel: '',
-    structureLines: [],
+    structure: [],
     reason: 'Every session scheduled for today has been logged.',
     actions: actionsFor('completed'),
     ...(nextName ? { nextUpcomingName: nextName } : {}),
@@ -143,7 +160,7 @@ export function buildTodaysWorkoutVM(input: TodaysWorkoutInput): TodaysWorkoutVM
     phaseLabel: `${input.phaseLabelByWeek.get(actionable.weekNumber) ?? ''} · Week ${String(actionable.weekNumber)}`,
     priority: actionable.priority,
     ...(template ? { estMinutes: template.estMinutes } : {}),
-    structureLines: [...(input.structureLinesByInstanceId.get(actionable.id) ?? [])],
+    structure: [...(input.structureByInstanceId.get(actionable.id) ?? [])],
     reason: reasonForToday(actionable.priority, actionable.recoveryTags),
     ...(explanation ? { adjustmentReason: explanation } : {}),
     ...(input.symptomCaution ? { symptomCaution: input.symptomCaution } : {}),

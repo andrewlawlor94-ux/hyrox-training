@@ -21,6 +21,13 @@ export interface TodaysWorkoutActions {
  */
 export type TodaysWorkoutKind = 'session' | 'allDoneToday' | 'restDay' | 'noPlan'
 
+/** An exercise and its prescribed dose, kept as two fields so the card can
+ * align them as columns rather than printing "name: dose" prose. */
+export interface ExerciseStructure {
+  name: string
+  detail: string
+}
+
 export interface TodaysWorkoutVM {
   kind: TodaysWorkoutKind
   instance?: WorkoutInstance
@@ -28,7 +35,7 @@ export interface TodaysWorkoutVM {
   phaseLabel: string
   priority?: Priority
   estMinutes?: number
-  structureLines: string[]
+  structure: ExerciseStructure[]
   reason: string
   adjustmentReason?: string
   symptomCaution?: string

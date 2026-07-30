@@ -49,16 +49,30 @@ export const TodaysWorkoutCard: FC<TodaysWorkoutCardProps> = ({
 
       {vm.phaseLabel && <p className="todays-workout-card__phase">{vm.phaseLabel}</p>}
 
-      {vm.priority && (
-        <p className="todays-workout-card__meta">
-          <Chip tone={PRIORITY_TONE[vm.priority]}>{PRIORITY_LABEL[vm.priority]}</Chip>
-          {vm.estMinutes !== undefined && <span> · ~{vm.estMinutes} min</span>}
-        </p>
+      {/* Priority, duration and exercise count as chips on one line, rather than
+          a chip followed by "· ~45 min" in loose prose. */}
+      {(vm.priority !== undefined || vm.estMinutes !== undefined) && (
+        <div className="todays-workout-card__meta">
+          {vm.priority && <Chip tone={PRIORITY_TONE[vm.priority]}>{PRIORITY_LABEL[vm.priority]}</Chip>}
+          {vm.estMinutes !== undefined && <Chip tone="neutral">~{vm.estMinutes} min</Chip>}
+          {vm.structure.length > 0 && (
+            <Chip tone="neutral">
+              {vm.structure.length} {vm.structure.length === 1 ? 'exercise' : 'exercises'}
+            </Chip>
+          )}
+        </div>
       )}
 
-      {vm.structureLines.length > 0 && (
+      {/* Exercise and dose as aligned columns — "Back squat  4 x 5" reads down
+          the page far faster than a list of "Back squat: 4 x 5" sentences. */}
+      {vm.structure.length > 0 && (
         <ul className="todays-workout-card__structure">
-          {vm.structureLines.map((line) => <li key={line}>{line}</li>)}
+          {vm.structure.map((item) => (
+            <li key={`${item.name}-${item.detail}`} className="exercise-row">
+              <span className="exercise-row__name">{item.name}</span>
+              {item.detail && <span className="exercise-row__detail">{item.detail}</span>}
+            </li>
+          ))}
         </ul>
       )}
 

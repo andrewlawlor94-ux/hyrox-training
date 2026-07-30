@@ -9,20 +9,20 @@ import { evaluateMilestones } from '@/domain/milestones/evaluate'
 import { goalTargets } from '@/domain/milestones/goalTargets'
 import { computeTrajectory, estimateRaceRange } from '@/domain/milestones/trajectory'
 import { buildMilestoneFacts, currentPlanWeek } from './homeFacts'
-import { buildGoalSnapshotVM, buildThisWeekVM, buildTodaysWorkoutVM, structureLineFor } from './homeViewModel'
-import type { HomeViewModel } from './types'
+import { buildGoalSnapshotVM, buildThisWeekVM, buildTodaysWorkoutVM, structureFor } from './homeViewModel'
+import type { ExerciseStructure, HomeViewModel } from './types'
 
 function symptomCautionText(symptomState: SymptomState): string | undefined {
   const reasons = [...symptomState.shin.reasons, ...symptomState.sciatic.reasons]
   return reasons.length > 0 ? reasons.join(' ') : undefined
 }
 
-async function structureLinesFor(instanceId: string): Promise<string[]> {
+async function structureForInstance(instanceId: string): Promise<ExerciseStructure[]> {
   const prescriptions = await db.instancePrescriptions.where('instanceId').equals(instanceId).sortBy('order')
-  const lines: string[] = []
+  const lines: ExerciseStructure[] = []
   for (const prescription of prescriptions) {
     const exercise = await db.exercises.get(prescription.exerciseId)
-    if (exercise) lines.push(structureLineFor(exercise, prescription))
+    if (exercise) lines.push(structureFor(exercise, prescription))
   }
   return lines
 }
@@ -51,7 +51,7 @@ async function loadHomeData(today: ISODate): Promise<HomeViewModel> {
   const noPlan: HomeViewModel = {
     hasPlan: false,
     today: {
-      kind: 'noPlan', name: 'No plan installed', phaseLabel: '', structureLines: [],
+      kind: 'noPlan', name: 'No plan installed', phaseLabel: '', structure: [],
       reason: 'Finish onboarding to install a training plan.',
       actions: { start: false, continue: false, completedEarlier: false, defer: false, skip: false, edit: false },
     },
@@ -91,9 +91,9 @@ async function loadHomeData(today: ISODate): Promise<HomeViewModel> {
   const symptomState = evaluateSymptoms(symptomLogs, today)
 
   const todaysInstances = instances.filter((i: WorkoutInstance) => i.scheduledDate === today)
-  const structureLinesByInstanceId = new Map<string, string[]>()
+  const structureByInstanceId = new Map<string, ExerciseStructure[]>()
   for (const instance of todaysInstances) {
-    structureLinesByInstanceId.set(instance.id, await structureLinesFor(instance.id))
+    structureByInstanceId.set(instance.id, await structureForInstance(instance.id))
   }
 
   const currentWeek = currentPlanWeek(plan.startDate, today, plan.weeksCount)
@@ -112,7 +112,7 @@ async function loadHomeData(today: ISODate): Promise<HomeViewModel> {
   return {
     hasPlan: true,
     today: buildTodaysWorkoutVM({
-      today, instances, templatesById, phaseLabelByWeek, structureLinesByInstanceId, explanationByInstanceId,
+      today, instances, templatesById, phaseLabelByWeek, structureByInstanceId, explanationByInstanceId,
       symptomCaution: symptomCautionText(symptomState),
     }),
     week: buildThisWeekVM({

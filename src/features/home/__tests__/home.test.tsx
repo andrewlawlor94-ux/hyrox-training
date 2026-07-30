@@ -76,8 +76,23 @@ describe("Home: today's workout card", () => {
     expect(within(card).getByText(/Week 1/)).toBeInTheDocument()
     expect(within(card).getByText('Essential')).toBeInTheDocument()
     expect(within(card).getByText(/min/)).toBeInTheDocument()
-    expect(card.querySelectorAll('.todays-workout-card__structure li').length).toBeGreaterThan(0)
-    expect(within(card).getByText(/priority: essential/i)).toBeInTheDocument()
+    // Each exercise is now a row of two aligned columns (name, dose) rather
+    // than a "Back squat: 4 x 5" sentence.
+    const rows = card.querySelectorAll('.todays-workout-card__structure .exercise-row')
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) {
+      expect(row.querySelector('.exercise-row__name')?.textContent).not.toBe('')
+    }
+    // At least one row carries a real prescribed dose — otherwise this would
+    // pass on a card listing bare exercise names with nothing prescribed.
+    const details = [...rows].map((row) => row.querySelector('.exercise-row__detail')?.textContent ?? '')
+    expect(details.some((detail) => detail.trim() !== '')).toBe(true)
+
+    // Priority is carried by its chip (asserted above), so the reason sentence
+    // no longer repeats it as "— priority: essential".
+    const reason = card.querySelector('.todays-workout-card__reason')?.textContent ?? ''
+    expect(reason).toMatch(/^Scheduled for today as /)
+    expect(reason).not.toMatch(/priority:/i)
   })
 
   it('offers Start for an available session, and Start navigates to /workout/:id', async () => {
