@@ -235,7 +235,7 @@ test('text meets WCAG AA contrast on every screen', async ({ page }) => {
   await completeOnboarding(page)
   expect(await belowAAContrast(page), 'Home').toEqual([])
 
-  for (const tab of ['Progress', 'Plan', 'Settings']) {
+  for (const tab of ['Calendar', 'Plan', 'Progress', 'Settings']) {
     await page.getByRole('link', { name: tab, exact: true }).click()
     await expect(page.getByRole('heading', { level: 1, name: tab })).toBeVisible({ timeout: 15_000 })
     expect(await belowAAContrast(page), tab).toEqual([])

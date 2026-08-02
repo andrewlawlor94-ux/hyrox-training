@@ -35,6 +35,12 @@ const LibraryScreen = lazy(() =>
 const PlanScreen = lazy(() =>
   import('@/features/plan/PlanScreen').then((module) => ({ default: module.PlanScreen })))
 
+/** Calendar (§ athlete request: the whole plan plus completed history as month
+ * grids). Lazy for the same reason as Progress/Plan/Library — it renders a full
+ * month of cells and is not on the first-paint path. */
+const CalendarScreen = lazy(() =>
+  import('@/features/calendar/CalendarScreen').then((module) => ({ default: module.CalendarScreen })))
+
 /**
  * Home, Settings, Workout logging, and Progress (all four laid out inside
  * `AppShell`, so the rest-timer bar and bottom nav stay visible) plus
@@ -109,6 +115,16 @@ export const AppRoutes: FC = () => (
           <ErrorBoundary>
             <Suspense fallback={<p className="route-loading">Loading…</p>}>
               <PlanScreen />
+            </Suspense>
+          </ErrorBoundary>
+        )}
+      />
+      <Route
+        path="/calendar"
+        element={(
+          <ErrorBoundary>
+            <Suspense fallback={<p className="route-loading">Loading…</p>}>
+              <CalendarScreen />
             </Suspense>
           </ErrorBoundary>
         )}

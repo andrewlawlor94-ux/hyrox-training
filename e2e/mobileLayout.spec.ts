@@ -139,7 +139,10 @@ test('every in-app screen is tappable, inset, and free of overflow at 375px', as
 
   await auditCurrentScreen('Home')
 
-  for (const tab of ['Progress', 'Plan', 'Settings']) {
+  // Calendar included deliberately: a seven-column month grid is the densest
+  // layout in the app, and its day cells are exactly where a 44px tap target is
+  // hardest to keep.
+  for (const tab of ['Calendar', 'Plan', 'Progress', 'Settings']) {
     await page.getByRole('link', { name: tab, exact: true }).click()
     await expect(page.getByRole('heading', { level: 1, name: tab })).toBeVisible({ timeout: 15_000 })
     await auditCurrentScreen(tab)

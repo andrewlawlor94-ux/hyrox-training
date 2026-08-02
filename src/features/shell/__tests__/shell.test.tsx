@@ -48,7 +48,14 @@ beforeEach(async () => {
 })
 
 describe('app shell', () => {
-  it('renders exactly four bottom-nav destinations, Home, Progress, Plan, and Settings, as accessible links', async () => {
+  /**
+   * FIVE destinations, not the brief's four. Calendar was added at the athlete's
+   * explicit request ("Build a calendar view tab with the workouts leading up to
+   * race day"), which is a deliberate deviation from §UX's four-destination list
+   * rather than drift — recorded here so the next reader knows it was asked for.
+   * Still no hamburger menu, and every tab is a real link with a text label.
+   */
+  it('renders exactly five bottom-nav destinations as accessible links, with no hidden menu', async () => {
     await seedTestDb()
     await updateSettings({ onboardingCompletedAt: NOW })
     renderApp({ route: '/' })
@@ -56,11 +63,12 @@ describe('app shell', () => {
     await screen.findByRole('heading', { name: /home/i })
     const nav = screen.getByRole('navigation', { name: /primary/i })
     const links = within(nav).getAllByRole('link')
-    expect(links).toHaveLength(4)
-    expect(within(nav).getByRole('link', { name: 'Home' })).toBeInTheDocument()
-    expect(within(nav).getByRole('link', { name: 'Progress' })).toBeInTheDocument()
-    expect(within(nav).getByRole('link', { name: 'Plan' })).toBeInTheDocument()
-    expect(within(nav).getByRole('link', { name: 'Settings' })).toBeInTheDocument()
+    expect(links).toHaveLength(5)
+    for (const label of ['Home', 'Calendar', 'Plan', 'Progress', 'Settings']) {
+      expect(within(nav).getByRole('link', { name: label }), label).toBeInTheDocument()
+    }
+    // Order matters for muscle memory: Home first, Settings last.
+    expect(links.map((l) => l.textContent)).toEqual(['Home', 'Calendar', 'Plan', 'Progress', 'Settings'])
   })
 
   it('has no hamburger menu anywhere in the tree', async () => {

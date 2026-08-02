@@ -766,3 +766,48 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .plan-manager__hint { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
 
 
+
+/* ---------- Calendar ---------- */
+.calendar-screen { display: flex; flex-direction: column; gap: var(--space-3); }
+.calendar-screen__heading { font-size: var(--font-size-2xl); margin: 0; }
+.calendar-screen__loading { color: var(--text-muted); }
+
+.calendar-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.calendar-nav__label { margin: 0; font-weight: 700; font-size: var(--font-size-lg); }
+
+/* Seven equal columns. `minmax(0, 1fr)` so a long day cell shrinks rather than
+   widening the grid past the viewport — the whole reason the page fits 375px. */
+/* Tight horizontal padding and 1px gaps on purpose: seven columns have to hold
+   44px tap targets at 375px, and the arithmetic is unforgiving. With the app's
+   20px content inset, `var(--space-2)` padding plus 2px gaps left 43.86px per
+   day — passing the 44px rule only by rounding slack. 4px padding and 1px gaps
+   give ~45.9px, which is a real margin rather than a coincidence. */
+.calendar-grid-card { display: flex; flex-direction: column; gap: 1px; padding: var(--space-2) 4px; }
+.calendar-weekdays, .calendar-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 1px; }
+.calendar-weekdays__cell {
+  text-align: center; font-size: var(--font-size-xs); font-weight: 700; color: var(--text-muted); padding: 2px 0;
+}
+
+/* A real 44x44 tap target, which is why the grid padding above is so tight. */
+.calendar-day {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px;
+  min-height: 44px; padding: 2px; border-radius: var(--radius-control);
+  background: var(--surface); border: 1px solid transparent; min-width: 0;
+}
+.calendar-day--button { font: inherit; color: inherit; cursor: pointer; }
+.calendar-day--outside { opacity: 0.45; }
+.calendar-day--today { border-color: var(--accent); background: var(--accent-soft); }
+.calendar-day--race { border-color: var(--elevated); }
+.calendar-day__number { font-size: var(--font-size-xs); font-weight: 600; font-variant-numeric: tabular-nums; }
+.calendar-day__race-tag { font-size: 9px; font-weight: 700; color: var(--elevated); text-transform: uppercase; }
+.calendar-day__dots { display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; }
+
+.calendar-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.calendar-dot--done { background: var(--green); }
+.calendar-dot--planned { background: var(--accent); }
+/* Hollow rather than a third colour: distinguishable without relying on hue,
+   and the legend and each day's accessible name both say it in words. */
+.calendar-dot--missed { background: transparent; border: 1px solid var(--text-muted); }
+
+.calendar-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--font-size-sm); color: var(--text-muted); }
+.calendar-legend__item { display: inline-flex; align-items: center; gap: var(--space-1); }

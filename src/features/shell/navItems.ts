@@ -20,7 +20,8 @@ export interface NavItem {
  */
 export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/', label: 'Home', end: true },
-  { to: '/progress', label: 'Progress' },
+  { to: '/calendar', label: 'Calendar' },
   { to: '/plan', label: 'Plan' },
+  { to: '/progress', label: 'Progress' },
   { to: '/settings', label: 'Settings' },
 ]
