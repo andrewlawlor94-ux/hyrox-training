@@ -65,6 +65,35 @@ export async function completeOnboarding(
   await page.getByRole('button', { name: 'Finish' }).click()
 
   await expect(page.getByRole('heading', { name: 'Home' })).toBeVisible({ timeout: 20_000 })
+
+  // On a Sunday the plan schedules nothing, so callers that go on to start a
+  // workout would find no session. Pull the next one forward — see
+  // `ensureSessionToday`.
+  await ensureSessionToday(page)
+}
+
+/**
+ * Guarantees Home has an actionable session for TODAY, pulling the next one
+ * forward if the plan says rest.
+ *
+ * Necessary because automated placement only ever uses Monday-Saturday
+ * (`AUTOMATED_PLACEMENT_WEEKDAYS_PER_WEEK`), so on a SUNDAY nothing is scheduled
+ * and every spec that assumes "there is a session today" fails. That is not a
+ * hypothetical: three specs failed for exactly this reason on a Sunday, having
+ * passed all week — a test that breaks one day in seven is broken, not flaky.
+ *
+ * These specs run against the real clock on purpose (the rest timer asserts
+ * genuine elapsed wall-clock time across a reload), so freezing the date is not
+ * an option. Instead this uses the app's own rest-day affordance, which exists
+ * precisely so an athlete can train on a day the plan left empty.
+ */
+export async function ensureSessionToday(page: Page): Promise<void> {
+  const doToday = page.getByRole('button', { name: 'Do this today' })
+  if (await doToday.count() === 0) return
+  await doToday.click()
+  // Wait for the card to become a real, startable session rather than the
+  // rest-day state.
+  await expect(page.getByRole('button', { name: 'Start' })).toBeVisible()
 }
 
 /**
