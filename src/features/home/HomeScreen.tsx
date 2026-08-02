@@ -19,6 +19,7 @@ import { useHomeData } from './useHomeData'
 import { TodaysWorkoutCard } from './TodaysWorkoutCard'
 import { ThisWeekCard } from './ThisWeekCard'
 import { GoalSnapshotCard } from './GoalSnapshotCard'
+import { SessionPreviewSheet } from './SessionPreviewSheet'
 
 function logAndIgnore(err: unknown): void {
   console.error('Home action failed', err)
@@ -41,6 +42,9 @@ export const HomeScreen: FC = () => {
   const settings = useSettings()
   const homeData = useHomeData(today)
   const [disabled, setDisabled] = useState(false)
+  // Which session's preview is open. Owned here rather than per card, because
+  // both Today's workout and This week open the same sheet.
+  const [previewInstanceId, setPreviewInstanceId] = useState<string | null>(null)
   const inFlight = useRef(false)
 
   const symptomState = useLiveQuery(async () => {
@@ -135,11 +139,18 @@ export const HomeScreen: FC = () => {
             onCompletedEarlier={handleCompletedEarlier}
             onDefer={handleDefer}
             onSkip={handleSkip}
+            onSelectSession={setPreviewInstanceId}
           />
-          {homeData.week && <ThisWeekCard vm={homeData.week} />}
+          {homeData.week && <ThisWeekCard vm={homeData.week} onSelectSession={setPreviewInstanceId} />}
           {homeData.goal && <GoalSnapshotCard vm={homeData.goal} />}
         </>
       )}
+
+      <SessionPreviewSheet
+        instanceId={previewInstanceId}
+        today={today}
+        onClose={() => { setPreviewInstanceId(null) }}
+      />
 
       {affected.map(({ instance, substitution }) => (
         <SubstitutionCard key={`${instance.id}:${substitution.kind}`} instanceId={instance.id} substitution={substitution} />

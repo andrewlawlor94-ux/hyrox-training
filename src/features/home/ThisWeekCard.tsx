@@ -8,6 +8,9 @@ import type { ScheduleRow, ThisWeekVM } from './types'
 
 interface ThisWeekCardProps {
   vm: ThisWeekVM
+  /** Opens the session preview. The card stays presentational — Home owns which
+   * session is open, because the preview sheet is shared with Today's workout. */
+  onSelectSession: (instanceId: string) => void
 }
 
 const PERCENT = 100
@@ -47,7 +50,7 @@ function dayLabel(date: string): string {
  * The view model is deliberately unchanged — those fields are still the honest
  * derivation and other callers/tests use them. This is a presentation change.
  */
-export const ThisWeekCard: FC<ThisWeekCardProps> = ({ vm }) => {
+export const ThisWeekCard: FC<ThisWeekCardProps> = ({ vm, onSelectSession }) => {
   const minimumTone: ChipTone = vm.fourSessionMinimumMet ? 'green' : 'accent'
   const percent = essentialPercent(vm.essentialCompletedCount, vm.essentialTotalCount)
   const movedDateById = new Map(vm.movedRows.map(({ row, originalDate }) => [row.id, originalDate]))
@@ -88,15 +91,20 @@ export const ThisWeekCard: FC<ThisWeekCardProps> = ({ vm }) => {
           {vm.schedule.map((row: ScheduleRow) => {
             const movedFrom = movedDateById.get(row.id)
             return (
-              <li key={row.id} className="week-row">
-                <span className="week-row__day">{dayLabel(row.scheduledDate)}</span>
-                <span className="week-row__name">
-                  {row.name}
-                  {movedFrom !== undefined && (
-                    <span className="week-row__moved">moved from {dayLabel(movedFrom)}</span>
-                  )}
-                </span>
-                <Chip tone={STATUS_TONE[row.status]}>{STATUS_LABEL[row.status]}</Chip>
+              <li key={row.id}>
+                {/* The whole row is the control, so the tap target is the row
+                    rather than a small link inside it (athlete: "I want to be
+                    able to click the workout and view what is planned"). */}
+                <button type="button" className="week-row week-row--button" onClick={() => { onSelectSession(row.id) }}>
+                  <span className="week-row__day">{dayLabel(row.scheduledDate)}</span>
+                  <span className="week-row__name">
+                    {row.name}
+                    {movedFrom !== undefined && (
+                      <span className="week-row__moved">moved from {dayLabel(movedFrom)}</span>
+                    )}
+                  </span>
+                  <Chip tone={STATUS_TONE[row.status]}>{STATUS_LABEL[row.status]}</Chip>
+                </button>
               </li>
             )
           })}

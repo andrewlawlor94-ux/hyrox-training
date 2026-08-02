@@ -23,6 +23,8 @@ interface TodaysWorkoutCardProps {
   onCompletedEarlier: (forDate: ISODate) => void
   onDefer: () => void
   onSkip: () => void
+  /** Opens the session preview for today's session, when there is one. */
+  onSelectSession: (instanceId: string) => void
 }
 
 /**
@@ -46,7 +48,7 @@ interface TodaysWorkoutCardProps {
  *   require that trip either.
  */
 export const TodaysWorkoutCard: FC<TodaysWorkoutCardProps> = ({
-  vm, today, disabled, onStart, onContinue, onCompletedEarlier, onDefer, onSkip,
+  vm, today, disabled, onStart, onContinue, onCompletedEarlier, onDefer, onSkip, onSelectSession,
 }) => {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -54,6 +56,7 @@ export const TodaysWorkoutCard: FC<TodaysWorkoutCardProps> = ({
 
   // Called unconditionally (hooks cannot be conditional); `request` no-ops when
   // there is nothing to pull forward.
+  const pullForwardId = vm.pullForward?.instanceId ?? ''
   const pullForward = useMoveWorkout({ instanceId: vm.pullForward?.instanceId, today })
 
   function handleConfirmCompletedEarlier(forDate: ISODate): void {
@@ -64,7 +67,22 @@ export const TodaysWorkoutCard: FC<TodaysWorkoutCardProps> = ({
   return (
     <Card as="section" className="todays-workout-card">
       <h2>Today&apos;s workout</h2>
-      <p className="todays-workout-card__name">{vm.name}</p>
+      {/* Tapping the name opens the same preview the This-week rows do, so
+          "view what is planned" works from either place. Only a control when
+          there is a real session behind it. */}
+      {vm.instance ? (
+        <p className="todays-workout-card__name">
+          <button
+            type="button"
+            className="todays-workout-card__name-button"
+            onClick={() => { onSelectSession(vm.instance?.id ?? '') }}
+          >
+            {vm.name}
+          </button>
+        </p>
+      ) : (
+        <p className="todays-workout-card__name">{vm.name}</p>
+      )}
 
       {vm.phaseLabel && <p className="todays-workout-card__phase">{vm.phaseLabel}</p>}
 
@@ -114,7 +132,13 @@ export const TodaysWorkoutCard: FC<TodaysWorkoutCardProps> = ({
       {vm.pullForward && (
         <div className="todays-workout-card__pull-forward">
           <p className="todays-workout-card__next">
-            Next up: {vm.pullForward.name}
+            <button
+              type="button"
+              className="todays-workout-card__name-button"
+              onClick={() => { onSelectSession(pullForwardId) }}
+            >
+              Next up: {vm.pullForward.name}
+            </button>
             <span className="todays-workout-card__next-date">scheduled {vm.pullForward.scheduledDate}</span>
           </p>
           <Button

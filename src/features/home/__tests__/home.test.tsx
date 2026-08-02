@@ -564,3 +564,116 @@ describe('Home: empty and rest-day states', () => {
     expect(within(dialog).getByLabelText('Move to')).toBeInTheDocument()
   })
 })
+
+/**
+ * Athlete: "I want to be able to click the workout and view what is planned
+ * (same for todays workout section), then in that new window there should be a
+ * button that says do today. This way I have the ability to adjust and say I
+ * want to run today despite having strength booked."
+ */
+describe('Home: tapping a session previews it and can pull it to today', () => {
+  it('shows what a This-week session prescribes, and moves it to today on "Do today"', async () => {
+    await seedTestDb()
+    await onboard()
+    await renderHome()
+
+    // A session scheduled LATER in the week — the interesting case, since that
+    // is the one "Do today" has to move.
+    const week = await instancesForWeek(1)
+    const later = week
+      .filter((i) => i.scheduledDate > TODAY)
+      .sort((a, b) => (a.scheduledDate < b.scheduledDate ? -1 : 1))[0]
+    if (!later) throw new Error('expected a week-1 session scheduled after today')
+
+    const card = await cardFor(/^this week$/i)
+    // Wait for the rows to render before querying them: Home's heading resolves
+    // before its data does.
+    await waitFor(() => {
+      expect(card.querySelectorAll('.week-row--button').length).toBeGreaterThan(1)
+    })
+    // Any row still "Upcoming" is a session later in the week — the rows render
+    // the day as "Tue 6", so matching on the ISO date's "06" would never hit.
+    const row = [...card.querySelectorAll<HTMLButtonElement>('.week-row--button')]
+      .find((b) => (b.textContent ?? '').includes('Upcoming'))
+    if (!row) throw new Error('expected a tappable row for a later session')
+    await userEvent.click(row)
+
+    const dialog = await screen.findByRole('dialog')
+    // It shows the PLAN for that session, not just its name.
+    await waitFor(() => {
+      expect(dialog.querySelectorAll('.session-preview__structure .exercise-row').length).toBeGreaterThan(0)
+    })
+    for (const exerciseRow of dialog.querySelectorAll('.session-preview__structure .exercise-row')) {
+      expect(exerciseRow.querySelector('.exercise-row__name')?.textContent?.trim()).not.toBe('')
+    }
+    expect(within(dialog).getByText(/^Scheduled /)).toBeInTheDocument()
+
+    // And it offers to bring that session forward.
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Do today' }))
+
+    // Today already holds a session, so this is a genuine conflict and the move
+    // WARNS first rather than double-booking the day. That warning is the point
+    // of routing "Do today" through the same flow as every other move.
+    const warning = await screen.findByText(/already has another session/i)
+    expect(warning).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Proceed anyway' }))
+
+    // Asserted against the database: a pinned override on today is what makes
+    // the move survive the next recompute.
+    await waitFor(async () => {
+      const overrides = await db.scheduleOverrides.toArray()
+      expect(overrides.some((o) => o.isPinned && o.date === TODAY)).toBe(true)
+    })
+  })
+
+  it("offers Start rather than Do today for a session already scheduled today", async () => {
+    await seedTestDb()
+    await onboard()
+    await renderHome()
+
+    const card = await cardFor(/today.s workout/i)
+    // Tapping the name opens the same preview. Waited for, because the name only
+    // becomes a control once Home has loaded a real session behind it.
+    await waitFor(() => {
+      expect(card.querySelector('.todays-workout-card__name-button')).not.toBeNull()
+    })
+    await userEvent.click(card.querySelector<HTMLButtonElement>('.todays-workout-card__name-button') as HTMLButtonElement)
+
+    const dialog = await screen.findByRole('dialog')
+    await waitFor(() => {
+      // Substring: the line reads "Scheduled for today · Base".
+      expect(within(dialog).getByText(/Scheduled for today/)).toBeInTheDocument()
+    })
+    // Moving a session onto the day it is already on would be a no-op, so it is
+    // not offered.
+    expect(within(dialog).queryByRole('button', { name: 'Do today' })).toBeNull()
+    expect(within(dialog).getByRole('button', { name: 'Start' })).toBeInTheDocument()
+  })
+
+  it('offers neither Start nor Do today for a completed session', async () => {
+    await seedTestDb()
+    await onboard()
+    const week = await instancesForWeek(1)
+    const target = week.find((i) => i.scheduledDate === TODAY)
+    if (!target) throw new Error('expected a session today')
+    await completeWorkout({ id: target.id, state: 'completed', forDate: TODAY, now: NOW })
+    await syncQueue(TODAY)
+
+    await renderHome()
+    const card = await cardFor(/^this week$/i)
+    await waitFor(() => {
+      const rows = [...card.querySelectorAll('.week-row--button')]
+      expect(rows.some((b) => (b.textContent ?? '').includes('Completed'))).toBe(true)
+    })
+    const completedRow = [...card.querySelectorAll<HTMLButtonElement>('.week-row--button')]
+      .find((b) => (b.textContent ?? '').includes('Completed'))
+    if (!completedRow) throw new Error('expected a completed session row')
+    await userEvent.click(completedRow)
+
+    const dialog = await screen.findByRole('dialog')
+    await waitFor(() => { expect(within(dialog).getByText(/Completed/)).toBeInTheDocument() })
+    // Completed history is neither startable nor movable.
+    expect(within(dialog).queryByRole('button', { name: 'Do today' })).toBeNull()
+    expect(within(dialog).queryByRole('button', { name: 'Start' })).toBeNull()
+  })
+})

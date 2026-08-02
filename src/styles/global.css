@@ -298,6 +298,31 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 }
 .week-row__name { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .week-row__moved { font-size: var(--font-size-xs); color: var(--text-muted); }
+/* The whole row is a control. Styled as the row it replaces so the card does not
+   read as a stack of buttons; `text-align: left` because a button centres by
+   default and would knock the columns out of alignment. */
+.week-row--button {
+  width: 100%; background: none; border: none; border-bottom: 1px solid var(--border);
+  text-align: left; font: inherit; color: inherit; cursor: pointer; min-height: var(--tap-min);
+}
+.week-row--button:last-child { border-bottom: none; }
+
+/* Session preview sheet. */
+.session-preview { display: flex; flex-direction: column; gap: var(--space-3); }
+.session-preview__meta { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.session-preview__when { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
+.session-preview__structure { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.session-preview__structure .exercise-row { border-bottom: 1px solid var(--border); }
+.session-preview__structure .exercise-row:last-child { border-bottom: none; }
+.session-preview__empty { margin: 0; color: var(--text-muted); }
+.session-preview__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.session-preview__error { margin: 0; color: var(--elevated); font-size: var(--font-size-sm); }
+
+/* Today's workout name as a control into the same preview. */
+.todays-workout-card__name-button {
+  background: none; border: none; padding: 0; margin: 0; font: inherit; color: inherit;
+  text-align: left; cursor: pointer; min-height: var(--tap-min);
+}
 /* Goal snapshot, laid out to be SCANNED rather than read (athlete feedback:
    "the layout is very text heavy"). Same facts, restructured — see the card's
    own doc comment for the reasoning behind each block. */
