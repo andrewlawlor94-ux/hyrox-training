@@ -17,3 +17,7 @@ export * from './manualMoveRepo'
 export * from './workoutMetadataRepo'
 export * from './safetyBackupRepo'
 export { assertMutable } from './guard'
+/** The generated Base-week phase name. Exported so a FEATURE can tell base
+ * weeks from core weeks (e.g. "core weeks" in the plan manager) without
+ * reaching into `planMaterialize` directly. */
+export { BASE_PHASE_NAME } from './planMaterialize'

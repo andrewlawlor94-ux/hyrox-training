@@ -2,7 +2,7 @@
 // per this project's read-that-writes rule. Kept as one small module so
 // `WeekList`/`WeekDetail`/`WorkoutEditor` share exactly one query shape.
 import { db } from '@/data/db'
-import { readSettings } from '@/data/repositories'
+import { BASE_PHASE_NAME, readSettings } from '@/data/repositories'
 import type { Exercise, InstancePrescription, Priority, WorkoutInstance, WorkoutKind, WorkoutStatus } from '@/data/types'
 
 export interface WeekSessionSummary {
@@ -109,4 +109,26 @@ export async function loadWorkoutEditorData(instanceId: string): Promise<Workout
   }
 
   return { instance, templateName: template?.name ?? 'Session', templateNotes: template?.notes ?? '', exercises }
+}
+
+/**
+ * The active plan's CORE-week count — its total weeks minus the generated Base
+ * ("Prologue") weeks. This is what "Core weeks" in the plan manager means, and it
+ * moves with race day, so it must be read rather than assumed: a plan compressed
+ * to fit an 8-week runway has 8 core weeks, not the seed's 24.
+ *
+ * `undefined` when there is no active plan, matching `loadPlanOverview`.
+ */
+export async function activePlanCoreWeeks(): Promise<number | undefined> {
+  const settings = await readSettings()
+  const plan = await db.plans.get(settings.activePlanId)
+  if (!plan) return undefined
+
+  const [weeks, phases] = await Promise.all([
+    db.planWeeks.where('planId').equals(plan.id).toArray(),
+    db.planPhases.where('planId').equals(plan.id).toArray(),
+  ])
+  const phaseNameById = new Map(phases.map((phase) => [phase.id, phase.name]))
+  const baseWeeks = weeks.filter((w) => phaseNameById.get(w.phaseId) === BASE_PHASE_NAME).length
+  return Math.max(1, plan.weeksCount - baseWeeks)
 }

@@ -6,6 +6,7 @@ import {
   archivePlan, changePlanDuration, duplicatePlan, getActiveGoal, installSeedPlan, listPlans,
   resetRecommendations, restoreSeedPlanPreservingHistory, setActivePlan, syncQueue,
 } from '@/data/repositories'
+import { activePlanCoreWeeks } from './planData'
 
 interface PlanManagerProps {
   today: string
@@ -25,7 +26,13 @@ export const PlanManager: FC<PlanManagerProps> = ({ today, onClose }) => {
   const goal = useLiveQuery(() => getActiveGoal())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [newDuration, setNewDuration] = useState('24')
+  // The plan's ACTUAL core-week count, not a hard-coded 24. Showing 24 for a
+  // plan that had been compressed to 8 (because race day is 8 weeks out) told
+  // the athlete something plainly false, and typing over it would have silently
+  // re-expanded the plan past race day.
+  const coreWeeks = useLiveQuery(() => activePlanCoreWeeks())
+  const [durationEdit, setDurationEdit] = useState<string | null>(null)
+  const newDuration = durationEdit ?? (coreWeeks === undefined ? '' : String(coreWeeks))
 
   async function run(action: () => Promise<unknown>): Promise<void> {
     setBusy(true)
@@ -92,10 +99,13 @@ export const PlanManager: FC<PlanManagerProps> = ({ today, onClose }) => {
         <label htmlFor="plan-manager-duration">Core weeks</label>
         <input
           id="plan-manager-duration" type="text" inputMode="numeric" value={newDuration}
-          onChange={(e) => { setNewDuration(e.target.value) }}
+          onChange={(e) => { setDurationEdit(e.target.value) }}
         />
         <Button variant="secondary" disabled={busy} onClick={() => { handleChangeDuration().catch(() => {}) }}>Change duration</Button>
-        <p className="plan-manager__hint">Race date and target time are edited in Settings.</p>
+        <p className="plan-manager__hint">
+          This follows race day automatically — changing the race date in Settings re-fits the plan.
+          Set it by hand only to override that.
+        </p>
       </section>
 
       <section className="plan-manager__section">

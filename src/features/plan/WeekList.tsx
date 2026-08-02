@@ -10,10 +10,14 @@ interface WeekListProps {
 }
 
 const PROGRESS_LABEL: Record<ReturnType<typeof weekProgress>, string> = {
-  completed: 'Done', inProgress: 'In progress', upcoming: 'Upcoming',
+  completed: 'Done', dropped: 'Not needed', inProgress: 'In progress', upcoming: 'Upcoming',
 }
+/** `dropped` is deliberately NOT green: nothing in the week happened. Neutral
+ * rather than a warning tone too — a week dropped because the race moved closer
+ * is a scheduling fact, not the athlete's failure (the same no-guilt rule the
+ * rest of the app follows). */
 const PROGRESS_TONE: Record<ReturnType<typeof weekProgress>, 'green' | 'accent' | 'neutral'> = {
-  completed: 'green', inProgress: 'accent', upcoming: 'neutral',
+  completed: 'green', dropped: 'neutral', inProgress: 'accent', upcoming: 'neutral',
 }
 
 function doneCount(sessions: WeekSummary['sessions']): number {

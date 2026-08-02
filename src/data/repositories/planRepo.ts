@@ -8,7 +8,8 @@ import { PLAN_WEEKS_DEFAULT } from '@/domain/planGeneration/constants'
 import { assertMutable } from './guard'
 import { getSettings, updateSettings } from './settingsRepo'
 import { syncQueue } from './scheduleRepo'
-import { materializePlan, pruneHistorylessPlanData } from './planMaterialize'
+import { BASE_PHASE_NAME, materializePlan, pruneHistorylessPlanData } from './planMaterialize'
+import { changePlanDuration } from './planEditRepo'
 import { newId } from './ids'
 
 export async function listPlans(): Promise<Plan[]> {
@@ -192,24 +193,48 @@ export async function restoreSeedPlanPreservingHistory(args: { today: ISODate; n
  * Returns the decision so the caller can show the athlete what happened.
  */
 export async function reanchorActivePlanToRaceDate(args: { today: ISODate }): Promise<ReanchorDecision | null> {
-  const decision = await db.transaction('rw', db.tables, async () => {
+  const prepared = await db.transaction('r', db.tables, async () => {
     const settings = await getSettings()
     const plan = await db.plans.get(settings.activePlanId)
     if (!plan) return null
     const goal = await db.raceGoals.filter((g) => g.isActive).first()
     if (!goal) return null
 
-    const result = reanchorToRaceDate({
-      currentStartDate: plan.startDate, weeksCount: plan.weeksCount, raceDate: goal.raceDate,
-    })
-    if (result.outcome === 'startShiftedLater') {
-      await db.plans.put({ ...plan, startDate: result.startDate })
-    }
-    return result
-  })
+    // Base ("Prologue") weeks are counted from the plan's own phase rows rather
+    // than assumed, because a plan can have anywhere from 0 to 8 of them.
+    const weeks = await db.planWeeks.where('planId').equals(plan.id).toArray()
+    const phases = await db.planPhases.where('planId').equals(plan.id).toArray()
+    const phaseNameById = new Map(phases.map((phase) => [phase.id, phase.name]))
+    const baseWeeks = weeks.filter((w) => phaseNameById.get(w.phaseId) === BASE_PHASE_NAME).length
 
-  // Outside the transaction: `syncQueue` opens its own, and it is what turns the
-  // new `startDate` into actual re-derived instance dates.
+    return {
+      plan,
+      decision: reanchorToRaceDate({
+        currentStartDate: plan.startDate,
+        baseWeeks,
+        currentCoreWeeks: Math.max(1, plan.weeksCount - baseWeeks),
+        raceDate: goal.raceDate,
+      }),
+    }
+  })
+  if (prepared === null) return null
+  const { plan, decision } = prepared
+
+  if (decision.outcome === 'startShiftedLater') {
+    await db.plans.put({ ...plan, startDate: decision.startDate })
+    await syncQueue(args.today)
+    return decision
+  }
+
+  if (decision.outcome === 'compressed' || decision.outcome === 'extended') {
+    // `changePlanDuration` re-materializes the history-less part of the plan at
+    // the new length, keeps every completed session, and runs `syncQueue`
+    // itself. Reused rather than reimplemented — it is the one tested path that
+    // knows how to change a plan's length without touching history.
+    await changePlanDuration({ coreWeeksCount: decision.coreWeeks, today: args.today })
+    return decision
+  }
+
   await syncQueue(args.today)
   return decision
 }

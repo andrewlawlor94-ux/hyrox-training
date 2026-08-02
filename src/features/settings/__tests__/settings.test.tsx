@@ -132,12 +132,19 @@ describe('Settings-lite: race goal and date', () => {
     })
     expect(await screen.findByText(/fewer than 24 weeks/i)).toBeInTheDocument()
 
-    // The race moved CLOSER, so the start deliberately does not move: pulling it
-    // backwards would drag plan weeks into the past, where placement finds no
-    // candidate day and the sessions in them are dropped rather than moved.
-    const plan = await activePlan()
-    expect(plan.startDate).toBe('2026-01-05')
-    expect(await screen.findByText(/closer than the remaining plan/i)).toBeInTheDocument()
+    // The race moved CLOSER, so the plan is COMPRESSED to fit rather than left
+    // at 24 weeks with the surplus stranded past race day. This assertion
+    // replaces one that expected the plan to be left alone: that behaviour left
+    // sixteen entirely auto-dropped weeks showing as "Done", which the athlete
+    // reported as making no sense.
+    await waitFor(async () => {
+      expect((await activePlan()).weeksCount).toBeLessThan(24)
+    })
+    // The START still does not move: pulling it backwards would drag plan weeks
+    // into the past, where placement finds no candidate day and their sessions
+    // are dropped rather than moved. Shortening is what fits a shorter runway.
+    expect((await activePlan()).startDate).toBe('2026-01-05')
+    expect(await screen.findByText(/core weeks instead of/i)).toBeInTheDocument()
   })
 
   // Without this, `setRaceGoal` swapped the goal row and appended the event but

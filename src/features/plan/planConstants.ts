@@ -41,16 +41,31 @@ export const STATUS_TONE: Record<WorkoutStatus, ChipTone> = {
   autoDropped: 'elevated',
 }
 
-const DONE_STATUSES: readonly WorkoutStatus[] = ['completed', 'partiallyCompleted', 'skipped', 'autoDropped']
+/** Statuses that mean the athlete actually ATTENDED the session. */
+const ATTENDED_STATUSES: readonly WorkoutStatus[] = ['completed', 'partiallyCompleted']
+/** Terminal but NOT attended: the session is settled and will not happen. */
+const UNATTENDED_TERMINAL_STATUSES: readonly WorkoutStatus[] = ['skipped', 'autoDropped']
+const SETTLED_STATUSES: readonly WorkoutStatus[] = [...ATTENDED_STATUSES, ...UNATTENDED_TERMINAL_STATUSES]
 const ACTIVE_STATUSES: readonly WorkoutStatus[] = ['available', 'inProgress']
 
-export type WeekProgress = 'completed' | 'inProgress' | 'upcoming'
+export type WeekProgress = 'completed' | 'dropped' | 'inProgress' | 'upcoming'
 
-/** A week's overall completion state, derived from its sessions' statuses --
- * never a fabricated "on schedule" judgment, purely what's actually
- * recorded. Empty weeks (no sessions materialized) read as `upcoming`. */
+/**
+ * A week's overall state, derived from its sessions' statuses -- never a
+ * fabricated "on schedule" judgment, purely what's actually recorded. Empty
+ * weeks (no sessions materialized) read as `upcoming`.
+ *
+ * `dropped` exists because reporting a week of entirely auto-dropped sessions as
+ * "Done" was actively misleading, and the athlete caught it: after a race date
+ * moved closer, sixteen weeks that fell past race day were all auto-dropped and
+ * the Plan tab labelled every one of them "Done". Nothing in them happened.
+ * A week only reads as completed if at least one session was genuinely attended.
+ */
 export function weekProgress(statuses: WorkoutStatus[]): WeekProgress {
-  if (statuses.length > 0 && statuses.every((s) => DONE_STATUSES.includes(s))) return 'completed'
-  if (statuses.some((s) => DONE_STATUSES.includes(s) || ACTIVE_STATUSES.includes(s))) return 'inProgress'
+  if (statuses.length === 0) return 'upcoming'
+  const allSettled = statuses.every((s) => SETTLED_STATUSES.includes(s))
+  const anyAttended = statuses.some((s) => ATTENDED_STATUSES.includes(s))
+  if (allSettled) return anyAttended ? 'completed' : 'dropped'
+  if (statuses.some((s) => SETTLED_STATUSES.includes(s) || ACTIVE_STATUSES.includes(s))) return 'inProgress'
   return 'upcoming'
 }
