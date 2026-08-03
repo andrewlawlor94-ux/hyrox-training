@@ -11,7 +11,7 @@ describe('exercise library seed', () => {
 
   it('includes every exercise the 24-week plan prescribes', () => {
     for (const name of [
-      'Back squat', 'Romanian deadlift', 'Split squat', 'Bench press',
+      'Back squat', 'Romanian deadlift', 'Bulgarian split squat', 'Bench press',
       'Lat pulldown', 'Pull-up', 'Walking lunge', 'Pallof press', 'Side plank',
       'Sled push', 'Sled pull', 'Farmer carry', 'Burpee broad jump',
       'SkiErg', 'Row', 'Sandbag lunge', 'Wall ball',
@@ -24,7 +24,7 @@ describe('exercise library seed', () => {
 
   it.each([
     ['Back squat', 150], ['Romanian deadlift', 120], ['Bench press', 120],
-    ['Split squat', 90], ['Walking lunge', 90], ['Sled push', 90],
+    ['Bulgarian split squat', 90], ['Walking lunge', 90], ['Sled push', 90],
     ['Sled pull', 90], ['Farmer carry', 90], ['Wall ball', 60],
     ['Burpee broad jump', 60], ['Pallof press', 45], ['Lat pulldown', 60],
   ])('seeds the %s rest default at %i seconds', (name, restSec) => {
@@ -54,7 +54,7 @@ describe('exercise library seed', () => {
   })
 
   it('uses per-dumbbell load style for the split squat', () => {
-    expect(byName('Split squat')?.loadStyle).toBe('perDumbbell')
+    expect(byName('Bulgarian split squat')?.loadStyle).toBe('perDumbbell')
   })
 
   it('uses body weight load style for walking lunges', () => {

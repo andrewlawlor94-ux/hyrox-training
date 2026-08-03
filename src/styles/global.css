@@ -825,3 +825,42 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 
 .calendar-legend { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--font-size-sm); color: var(--text-muted); }
 .calendar-legend__item { display: inline-flex; align-items: center; gap: var(--space-1); }
+
+/* ---------- Warm-up ---------- */
+/* Collapsed by default: guidance to glance at, not a block to log, and leaving
+   it open would push the first real exercise below the fold on a phone. */
+.warmup-card details { border: none; }
+.warmup-card__summary {
+  display: flex; align-items: center; gap: var(--space-2); min-height: var(--tap-min);
+  cursor: pointer; font-weight: 600; color: var(--accent);
+}
+.warmup-card__count { font-size: var(--font-size-sm); font-weight: 400; color: var(--text-muted); }
+.warmup-card__list {
+  list-style: none; margin: var(--space-2) 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: var(--space-2);
+}
+.warmup-drill {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 var(--space-2);
+  padding-bottom: var(--space-2); border-bottom: 1px solid var(--border);
+}
+.warmup-drill:last-child { border-bottom: none; padding-bottom: 0; }
+.warmup-drill__name { font-weight: 600; overflow-wrap: anywhere; }
+.warmup-drill__dose { font-variant-numeric: tabular-nums; color: var(--text-muted); white-space: nowrap; }
+/* Spans both columns on its own line — the reason is the longest text here. */
+.warmup-drill__why { grid-column: 1 / -1; font-size: var(--font-size-sm); color: var(--text-muted); }
+
+/* The load build-up inside a strength card. Muted and compact so it never
+   competes with the working set rows below it. */
+.warmup-ramp {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-2); border-radius: var(--radius-control); background: var(--surface-2);
+}
+.warmup-ramp__label { margin: 0; font-size: var(--font-size-sm); font-weight: 600; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.warmup-ramp__note { font-weight: 400; color: var(--text-muted); }
+.warmup-ramp__list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.warmup-ramp__set {
+  display: inline-flex; align-items: baseline; gap: var(--space-1);
+  font-size: var(--font-size-sm); font-variant-numeric: tabular-nums;
+}
+.warmup-ramp__load { font-weight: 600; }
+.warmup-ramp__percent { color: var(--text-muted); font-size: var(--font-size-xs); }

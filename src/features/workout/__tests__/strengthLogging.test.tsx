@@ -128,7 +128,7 @@ describe('strength logging screen', () => {
     const instanceId = await createWorkout(ids.map((exerciseId) => ({ exerciseId })))
     await renderWorkout(instanceId)
 
-    for (const name of ['Back squat', 'Romanian deadlift', 'Split squat', 'Bench press', 'Lat pulldown', 'Pallof press']) {
+    for (const name of ['Back squat', 'Romanian deadlift', 'Bulgarian split squat', 'Bench press', 'Lat pulldown', 'Pallof press']) {
       expect(await screen.findByText(name)).toBeInTheDocument()
     }
     // 4 + 3 + 3 + 4 + 3 + 3 prescribed sets across the six exercises. Set

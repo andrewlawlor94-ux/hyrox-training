@@ -4,6 +4,7 @@ import { EmptyState } from '@/components'
 import { useToday } from '@/hooks/useToday'
 import { AutosaveScopeProvider } from './AutosaveScopeProvider'
 import { ExerciseCard } from './ExerciseCard'
+import { WarmupCard } from './WarmupCard'
 import { useWorkout } from './useWorkout'
 import { WorkoutFooter } from './WorkoutFooter'
 
@@ -32,6 +33,10 @@ export const WorkoutScreen: FC = () => {
           {data.templateName && <p className="workout-screen__name">{data.templateName}</p>}
           <h1 className="workout-screen__heading">{`Week ${String(data.instance.weekNumber)} · Session ${String(data.instance.sessionSlot)}`}</h1>
         </div>
+        {/* Before the exercises, because a warm-up comes first. Derived from the
+            session's own movements, in the order they are prescribed. */}
+        <WarmupCard categories={data.exercises.map((item) => item.exercise.category)} />
+
         {data.exercises.length === 0 ? (
           <EmptyState
             title="Nothing prescribed"

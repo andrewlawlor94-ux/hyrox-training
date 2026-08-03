@@ -4,7 +4,7 @@ import { openDb } from '@/data/db'
 import { DbUnavailableError } from '@/data/errors'
 import type { DbFailureKind } from '@/data/errors'
 import { ensureSettings } from '@/data/repositories'
-import { seedIfEmpty } from '@/data/seed/seedRunner'
+import { reconcileSeededNames, seedIfEmpty } from '@/data/seed/seedRunner'
 import { DbErrorScreen } from './DbErrorScreen'
 
 type BootState = { status: 'pending' } | { status: 'ready' } | { status: 'error'; kind: DbFailureKind }
@@ -40,7 +40,12 @@ export const BootGate: FC<{ children: ReactNode }> = ({ children }) => {
     void (async () => {
       try {
         const database = await openDb()
-        await seedIfEmpty(database, new Date().toISOString())
+        const now = new Date().toISOString()
+        await seedIfEmpty(database, now)
+        // Carries seeded-exercise RENAMES to databases seeded before them.
+        // Cannot live inside `seedIfEmpty`, whose contract is to never touch a
+        // non-empty table; see `reconcileSeededNames`.
+        await reconcileSeededNames(database, now)
         await ensureSettings()
         setState({ status: 'ready' })
       } catch (err) {

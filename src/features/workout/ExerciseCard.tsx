@@ -6,6 +6,7 @@ import { primeAudio } from '@/features/timer/feedback'
 import { useRestTimer } from '@/features/timer/useRestTimer'
 import { EditPrescriptionSheet } from './EditPrescriptionSheet'
 import { hasUnknownLoad } from './loadPresentation'
+import { WarmupRamp } from './WarmupRamp'
 import { RunBlock } from './RunBlock'
 import { SetRow } from './SetRow'
 import { StationBlock } from './StationBlock'
@@ -89,6 +90,9 @@ const StrengthCard: FC<StrengthCardProps> = ({ item, frozen }) => {
         onUseTarget={() => { handleUseTarget().catch(logAndIgnore) }}
         {...(frozen ? {} : { onOpenSettings: () => { setEditOpen(true) } })}
       />
+      {/* Warm-up ramp to today's working load. Guidance only — see WarmupRamp. */}
+      {!unknownLoad && <WarmupRamp exercise={exercise} workingLoad={recommendation.target} />}
+
       <div className="exercise-card__sets">
         {sets.map((set, index) => (
           <SetRow

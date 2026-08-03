@@ -43,7 +43,12 @@ export const LOWER_BODY_EXERCISES = [
   },
   {
     id: 'ex_split_squat',
-    name: 'Split squat',
+    // Renamed from 'Split squat' at the athlete's request. The ID is unchanged on
+    // purpose: every `StrengthSet`, `InstancePrescription` and `Prescription`
+    // references it, so the rename keeps all history and its position in every
+    // workout. `SEED_EXERCISE_RENAMES` carries the same change to databases that
+    // were seeded before it.
+    name: 'Bulgarian split squat',
     category: 'lunge',
     measurementType: 'strengthSets',
     loadStyle: 'perDumbbell',
@@ -54,7 +59,9 @@ export const LOWER_BODY_EXERCISES = [
     defaultSets: 3,
     repMin: 8,
     repMax: 10,
-    techniqueNotes: 'Rear foot elevated optional; front shin stays roughly vertical through the descent.',
+    // Rear-foot elevation is no longer "optional": it is what makes the movement
+    // Bulgarian, so the note follows the name rather than contradicting it.
+    techniqueNotes: 'Rear foot elevated on a bench or box; front shin stays roughly vertical through the descent.',
     isArchived: false,
     isSeeded: true,
     createdAt: SEED_TIMESTAMP,

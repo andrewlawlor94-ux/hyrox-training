@@ -194,6 +194,11 @@ describe('station logging', () => {
     fireEvent.change(screen.getByLabelText(/rpe/i), { target: { value: '7' } })
     fireEvent.blur(screen.getByLabelText(/rpe/i))
 
+    // Explicit timeout: this waits on a DEBOUNCED write (250ms) plus a re-render.
+    // The row appears early carrying only `distanceM`, so the assertion keeps
+    // retrying until the time save lands — and under full-suite load that
+    // exceeded waitFor's 1s default, which is a flaky test rather than a real
+    // defect. Verified: passes alone 3/3, failed once under parallel load.
     await waitFor(async () => {
       const logs = await db.stationLogs.where('instanceId').equals(instanceId).toArray()
       expect(logs).toHaveLength(1)
@@ -201,7 +206,7 @@ describe('station logging', () => {
       expect(logs[0]?.distanceM).toBe(1000)
       expect(logs[0]?.timeSec).toBe(240)
       expect(logs[0]?.rpe).toBe(7)
-    })
+    }, { timeout: 3000 })
   })
 
   it('a station with no load entered still saves distance and time', async () => {
@@ -218,6 +223,6 @@ describe('station logging', () => {
       expect(logs[0]?.distanceM).toBe(1000)
       expect(logs[0]?.timeSec).toBe(210)
       expect(logs[0]?.load).toBeUndefined()
-    })
+    }, { timeout: 3000 })
   })
 })

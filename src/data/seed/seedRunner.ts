@@ -1,6 +1,7 @@
 import type { HyroxDb } from '@/data/db'
 import type { ISOInstant } from '@/data/types'
 import { SEED_EXERCISES } from './exercises'
+import { SEED_EXERCISE_RENAMES } from './exerciseRenames'
 import { SEED_HYROX_STANDARDS } from './hyroxStandards'
 
 /**
@@ -41,5 +42,33 @@ export async function seedIfEmpty(
     }
 
     return { exercises, standards }
+  })
+}
+
+/**
+ * Applies `SEED_EXERCISE_RENAMES` to a database that was seeded before a seeded
+ * exercise was renamed.
+ *
+ * Separate from `seedIfEmpty` because that function's whole contract is "never
+ * touch a table that already has rows" — which is right for content, and exactly
+ * why a rename cannot ride along with it. This writes at most one field, on at
+ * most the listed rows, and only while they still carry the previously shipped
+ * name (see `SeedExerciseRename.from`).
+ *
+ * Returns the ids it actually renamed, so a caller can log or test the effect
+ * rather than inferring it.
+ */
+export async function reconcileSeededNames(db: HyroxDb, now: ISOInstant): Promise<string[]> {
+  return db.transaction('rw', db.exercises, async () => {
+    const renamed: string[] = []
+    for (const rename of SEED_EXERCISE_RENAMES) {
+      const existing = await db.exercises.get(rename.id)
+      // Absent (never seeded), already renamed, or renamed by the athlete to
+      // something of their own — all three are left alone.
+      if (!existing || existing.name !== rename.from) continue
+      await db.exercises.put({ ...existing, name: rename.to, updatedAt: now })
+      renamed.push(rename.id)
+    }
+    return renamed
   })
 }
