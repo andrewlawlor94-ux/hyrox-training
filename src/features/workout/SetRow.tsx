@@ -140,6 +140,12 @@ export const SetRow: FC<SetRowProps> = ({ set, index, defaultWeight, defaultUnit
   return (
     <div className={rowClassName}>
       <span className="set-row__index" aria-hidden="true">{set.isCompleted ? '✓' : rowNumber}</span>
+      {/* No in-field `unit` suffix, deliberately. It reserved 32px of right
+          padding inside a 53px column, leaving about 9px of usable text area —
+          a three-digit weight like "205" was physically cut off, which is what
+          the athlete reported. The unit is not lost: `TargetHeader` states it
+          directly above every set row ("Today's target: 175 lb x 5"). The label
+          stays unit-free so it does not change with the athlete's unit setting. */}
       <NumberField
         id={`set-weight-${set.id}`}
         label={`Weight, set ${String(rowNumber)}`}
@@ -147,7 +153,6 @@ export const SetRow: FC<SetRowProps> = ({ set, index, defaultWeight, defaultUnit
         value={weight}
         onChange={handleWeightChange}
         onBlur={handleBlur}
-        unit={unit}
         inputMode="decimal"
       />
       <NumberField

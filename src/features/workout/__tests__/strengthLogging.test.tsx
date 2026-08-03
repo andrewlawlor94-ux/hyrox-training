@@ -542,15 +542,17 @@ describe('strength logging screen', () => {
     expect(document.querySelector('.target-header__reason')?.textContent).toMatch(/sciatic/i)
   })
 
-  it('renders station fields (distance, load, time, RPE) instead of a strength set row for a station exercise', async () => {
+  it('renders station fields (distance, time, RPE) instead of a strength set row for a station exercise', async () => {
     const instanceId = await createWorkout([{ exerciseId: 'ex_sled_push' }])
     await renderWorkout(instanceId)
 
     expect(await screen.findByText('Sled push')).toBeInTheDocument()
     expect(screen.getByLabelText('Distance')).toBeInTheDocument()
-    expect(screen.getByLabelText(/^load/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^time/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/rpe/i)).toBeInTheDocument()
+    // No generic "Load" for a sled: its weight is the sled plus plates, captured
+    // by the dedicated sled fields below rather than one number.
+    expect(screen.queryByLabelText(/^load/i)).toBeNull()
     // A strength SetRow's per-set fields ("Weight, set 1", "Reps, set 1")
     // never render for a station — this is what actually distinguishes a
     // station block from a strength card. A station's OWN generic "Reps"

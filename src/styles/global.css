@@ -418,6 +418,10 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .exercise-card__notes { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
 .exercise-card__station-fields { display: flex; flex-wrap: wrap; gap: var(--space-3); }
 .exercise-card__station-fields .number-field { flex: 1 1 120px; min-width: 100px; }
+/* Breaks and its explanation, full width under the measurement grid. */
+.station-block__breaks { display: flex; flex-direction: column; gap: var(--space-1); }
+.station-block__breaks .number-field { max-width: 140px; }
+.station-block__field-hint { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
 
 .target-header { display: flex; flex-direction: column; gap: var(--space-1); }
 .target-header__title-row { display: flex; align-items: baseline; gap: var(--space-2); flex-wrap: wrap; }
@@ -444,10 +448,20 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .target-header__target { color: var(--text); font-weight: 600; }
 .target-header__reason { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
 
+/* Weight gets a wider track than reps and RIR because it holds more digits: a
+   three-digit load plus a decimal, against one or two digits for the others.
+   Equal `1fr` tracks split the row evenly and starved the one field that needed
+   the room. Gaps tightened to `--space-1` for the same reason — at 375px this row
+   is five columns inside a card inside the app's content inset, and every 8px of
+   gap comes straight out of the inputs. */
 .set-row {
-  display: grid; grid-template-columns: var(--space-5) 1fr 1fr 1fr auto; gap: var(--space-2); align-items: center;
+  display: grid; grid-template-columns: var(--space-5) 1.5fr 1fr 1fr auto; gap: var(--space-1); align-items: center;
   border-radius: var(--radius-control); padding: var(--space-1) var(--space-2);
 }
+/* `min-width: 0` so a grid track can actually shrink to its share instead of
+   being held open by the input's default intrinsic width. */
+.set-row .number-field { min-width: 0; }
+.set-row .number-field__input { padding-left: var(--space-2); padding-right: var(--space-2); }
 .set-row__index { color: var(--text-muted); font-size: var(--font-size-sm); text-align: center; }
 /* A completed set gets a background tint AND a bolded, coloured index glyph
    -- colour is always paired with a text/shape change here, never the only

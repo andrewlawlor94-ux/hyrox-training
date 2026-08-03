@@ -70,19 +70,43 @@ describe('station logging', () => {
     }
   })
 
-  it('renders distance, reps, load, time, breaks, RPE, set/break structure, notes, and technique notes', async () => {
+  /**
+   * A sled push shows only the fields it HAS. It used to render all six for every
+   * station, so a 50 m push asked for a rep count and an unexplained "Breaks" —
+   * the athlete asked "what are reps and breaks? Should they be there?". Reps: no.
+   * Breaks: yes, and it now explains itself.
+   */
+  it('renders only the fields a sled push actually has, with breaks explained', async () => {
     const instanceId = await createStationWorkout(['ex_sled_push'])
     await renderWorkout(instanceId)
 
     expect(await screen.findByLabelText(/distance/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/^reps/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/^load/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^time/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/breaks/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/rpe/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/set\/break structure/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^notes/i)).toBeInTheDocument()
     expect(screen.getByText(/Technique:/)).toBeInTheDocument()
+
+    // A 50 m sled push has no rep count, and its weight is captured by the sled
+    // fields (sled weight + plates + surface), not a single "Load" number.
+    expect(screen.queryByLabelText(/^reps/i)).toBeNull()
+    expect(screen.queryByLabelText(/^load/i)).toBeNull()
+
+    // Breaks says what it means for THIS station rather than leaving the athlete
+    // to guess.
+    expect(screen.getByText(/stopped pushing mid-length/i)).toBeInTheDocument()
+  })
+
+  it('renders reps for wall balls — the one station counted in reps, not metres', async () => {
+    const instanceId = await createStationWorkout(['ex_wall_ball'])
+    await renderWorkout(instanceId)
+
+    expect(await screen.findByLabelText(/^reps/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^load/i)).toBeInTheDocument()
+    // Wall balls are 100 reps, not a distance.
+    expect(screen.queryByLabelText(/distance/i)).toBeNull()
+    expect(screen.getByText(/before finishing the reps/i)).toBeInTheDocument()
   })
 
   it('shows the seeded Men\'s Open standard as the reference, including the kg/lb equivalent', async () => {
@@ -163,7 +187,10 @@ describe('station logging', () => {
     await renderWorkout(instanceId)
 
     fireEvent.change(screen.getByLabelText(/distance/i), { target: { value: '1000' } })
-    fireEvent.change(screen.getByLabelText(/^time/i), { target: { value: '240' } })
+    // Time is entered as mm:ss now, not a raw seconds count — a 4:00 row is
+    // "4:00", not "240". It commits on blur, like the run duration field.
+    fireEvent.change(screen.getByLabelText(/^time/i), { target: { value: '4:00' } })
+    fireEvent.blur(screen.getByLabelText(/^time/i))
     fireEvent.change(screen.getByLabelText(/rpe/i), { target: { value: '7' } })
     fireEvent.blur(screen.getByLabelText(/rpe/i))
 
@@ -182,7 +209,7 @@ describe('station logging', () => {
     await renderWorkout(instanceId)
 
     fireEvent.change(screen.getByLabelText(/distance/i), { target: { value: '1000' } })
-    fireEvent.change(screen.getByLabelText(/^time/i), { target: { value: '210' } })
+    fireEvent.change(screen.getByLabelText(/^time/i), { target: { value: '3:30' } })
     fireEvent.blur(screen.getByLabelText(/^time/i))
 
     await waitFor(async () => {

@@ -1,11 +1,12 @@
 import type { ChangeEvent, FC } from 'react'
 import { useState } from 'react'
 import type { SledSurface, StationLog } from '@/data/types'
-import { Card, NumberField } from '@/components'
+import { Card, DurationField, NumberField } from '@/components'
 import { saveStationLog } from '@/data/repositories'
 import { formatWithEquivalent } from '@/domain/units/format'
 import { STATION_BY_EXERCISE_ID } from './constants'
 import { stationReferenceText } from './stationReference'
+import { stationFieldSpec } from './stationFields'
 import { SledFields } from './SledFields'
 import { useAutosave } from './useAutosave'
 import type { StationExerciseVM } from './useWorkout'
@@ -60,6 +61,7 @@ export const StationBlock: FC<{ item: StationExerciseVM }> = ({ item }) => {
 
   const station = STATION_BY_EXERCISE_ID[exercise.id]
   const isSled = station === 'sledPush' || station === 'sledPull'
+  const fieldSpec = stationFieldSpec(station)
   const loadUnit = prescription.loadUnit ?? exercise.defaultUnit
   const referenceText = stationReferenceText(standard)
 
@@ -98,20 +100,53 @@ export const StationBlock: FC<{ item: StationExerciseVM }> = ({ item }) => {
       <h3 className="exercise-card__name">{exercise.name}</h3>
       {referenceText && <p className="station-block__reference">{`Reference: ${referenceText}`}</p>}
 
+      {/* Only the fields this station actually has — see `stationFields.ts`. A
+          sled push has no rep count, and asking for one made the whole block
+          read as guesswork. */}
       <div className="exercise-card__station-fields">
-        <NumberField id={`station-distance-${prescription.id}`} label="Distance" value={fields.distanceM} unit="m" onBlur={handleBlur}
-          onChange={(v) => { scheduleSave({ distanceM: v }) }} />
-        <NumberField id={`station-reps-${prescription.id}`} label="Reps" value={fields.reps} onBlur={handleBlur}
-          onChange={(v) => { scheduleSave({ reps: v }) }} />
-        <NumberField id={`station-load-${prescription.id}`} label="Load" value={fields.load} unit={loadUnit} onBlur={handleBlur}
-          onChange={(v) => { scheduleSave({ load: v }) }} />
-        <NumberField id={`station-time-${prescription.id}`} label="Time" value={fields.timeSec} unit="s" onBlur={handleBlur}
-          onChange={(v) => { scheduleSave({ timeSec: v }) }} />
-        <NumberField id={`station-breaks-${prescription.id}`} label="Breaks" value={fields.breaks} onBlur={handleBlur}
-          onChange={(v) => { scheduleSave({ breaks: v }) }} />
-        <NumberField id={`station-rpe-${prescription.id}`} label="RPE" value={fields.rpe} onBlur={handleBlur}
-          onChange={(v) => { scheduleSave({ rpe: v }) }} />
+        {fieldSpec.fields.includes('distance') && (
+          <NumberField id={`station-distance-${prescription.id}`} label="Distance" value={fields.distanceM} unit="m" onBlur={handleBlur}
+            onChange={(v) => { scheduleSave({ distanceM: v }) }} />
+        )}
+        {fieldSpec.fields.includes('reps') && (
+          <NumberField id={`station-reps-${prescription.id}`} label="Reps" value={fields.reps} onBlur={handleBlur}
+            onChange={(v) => { scheduleSave({ reps: v }) }} />
+        )}
+        {fieldSpec.fields.includes('load') && (
+          <NumberField id={`station-load-${prescription.id}`} label="Load" value={fields.load} unit={loadUnit} onBlur={handleBlur}
+            onChange={(v) => { scheduleSave({ load: v }) }} />
+        )}
+        {/* Minutes and seconds, not a raw seconds count — a 4-minute sled push is
+            "4:10", not "250". Commits on blur, so the save is scheduled and
+            flushed together. */}
+        {fieldSpec.fields.includes('time') && (
+          <DurationField
+            id={`station-time-${prescription.id}`}
+            label="Time"
+            valueSec={fields.timeSec}
+            onCommit={(v) => {
+              scheduleSave({ timeSec: v })
+              void autosave.flushKey(prescription.id)
+            }}
+          />
+        )}
+        {fieldSpec.fields.includes('rpe') && (
+          <NumberField id={`station-rpe-${prescription.id}`} label="RPE" value={fields.rpe} onBlur={handleBlur}
+            onChange={(v) => { scheduleSave({ rpe: v }) }} />
+        )}
       </div>
+
+      {/* Breaks sits outside the field grid so its explanation can sit under it
+          at full width. "Breaks" alone meant nothing to the athlete, and the
+          wording is per-station because stopping a sled and stopping a set of
+          wall balls are different things. */}
+      {fieldSpec.fields.includes('breaks') && (
+        <div className="station-block__breaks">
+          <NumberField id={`station-breaks-${prescription.id}`} label="Breaks" value={fields.breaks} onBlur={handleBlur}
+            onChange={(v) => { scheduleSave({ breaks: v }) }} />
+          <p className="station-block__field-hint">{fieldSpec.breaksHint}</p>
+        </div>
+      )}
       {fields.load !== null && loadUnit === 'kg' && (
         <p className="station-block__equivalent">{formatWithEquivalent({ value: fields.load, unit: 'kg' })}</p>
       )}
