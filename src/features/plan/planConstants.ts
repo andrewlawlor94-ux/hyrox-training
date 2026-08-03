@@ -60,12 +60,18 @@ export type WeekProgress = 'completed' | 'dropped' | 'inProgress' | 'upcoming'
  * moved closer, sixteen weeks that fell past race day were all auto-dropped and
  * the Plan tab labelled every one of them "Done". Nothing in them happened.
  * A week only reads as completed if at least one session was genuinely attended.
+ *
+ * `inProgress` likewise requires a session that was ATTENDED or is active
+ * today — a week has not started just because one of its sessions was dropped.
+ * Seen in the browser on race week, twenty weeks out: three of its four sessions
+ * fall after race day and are auto-dropped, and the week was labelled "In
+ * progress" as a result. Nothing about it had begun.
  */
 export function weekProgress(statuses: WorkoutStatus[]): WeekProgress {
   if (statuses.length === 0) return 'upcoming'
   const allSettled = statuses.every((s) => SETTLED_STATUSES.includes(s))
   const anyAttended = statuses.some((s) => ATTENDED_STATUSES.includes(s))
   if (allSettled) return anyAttended ? 'completed' : 'dropped'
-  if (statuses.some((s) => SETTLED_STATUSES.includes(s) || ACTIVE_STATUSES.includes(s))) return 'inProgress'
+  if (anyAttended || statuses.some((s) => ACTIVE_STATUSES.includes(s))) return 'inProgress'
   return 'upcoming'
 }

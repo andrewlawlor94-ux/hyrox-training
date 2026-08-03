@@ -779,6 +779,29 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .plan-manager__row-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 .plan-manager__hint { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }
 
+/* The drift, stated as two figures side by side rather than a paragraph the
+   athlete has to parse: what week the plan thinks it is on, and what week their
+   history says. `minmax(0, 1fr)` so the longer label ("Your history is on")
+   wraps inside its own tile instead of widening the sheet past 375px. */
+.realign__compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.realign__figure {
+  display: flex; flex-direction: column; gap: var(--space-1); min-width: 0;
+  padding: var(--space-2); border-radius: var(--radius-control); background: var(--surface-2);
+}
+.realign__figure-label { font-size: var(--font-size-sm); color: var(--text-muted); font-weight: 600; }
+.realign__figure-value { font-size: var(--font-size-lg); font-variant-numeric: tabular-nums; }
+.realign__explanation { margin: 0; }
+.realign__consequences {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1);
+  font-size: var(--font-size-sm); color: var(--text-muted);
+}
+.realign__result { margin: 0; font-weight: 600; }
+
+.realign-confirm { display: flex; flex-direction: column; gap: var(--space-3); }
+.realign-confirm p { margin: 0; }
+.realign-confirm__warning { color: var(--caution); font-weight: 600; }
+.realign-confirm__actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
 
 
 /* ---------- Calendar ---------- */

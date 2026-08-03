@@ -760,6 +760,44 @@ describe('determinism and purity', () => {
   })
 })
 
+describe('nothing is ever scheduled into the past', () => {
+  /**
+   * Found while building "realign the schedule to today". `attemptOwnWeek`
+   * scans from `max(today, plannedDate)`, but the following-week escalation used
+   * to start unconditionally at that week's Monday — so a session whose own plan
+   * week had already gone failed its own week and then landed on a date in the
+   * *previous* week, reported as `upcoming` for ever on a day that could never
+   * be trained. Exactly the "schedule is out of whack" symptom.
+   */
+  it('does not let the following-week escalation land a session on a date that has gone', () => {
+    // Three weeks after the plan started, with week 1 still entirely open:
+    // both week 1 (Aug 3-8) and its escalation target week 2 (Aug 10-15) are past.
+    const today = '2026-08-24'
+    const result = recomputeQueue(input({ today, templates: weekTemplates(1) }))
+
+    const inThePast = result.instances
+      .filter((i) => i.scheduledDate !== null && i.scheduledDate < today)
+      .map((i) => `${i.templateId} ${String(i.scheduledDate)}`)
+    expect(inThePast).toEqual([])
+    // They are dropped rather than quietly re-dated, and every one is accounted for.
+    expect(result.instances.every((i) => i.status === 'autoDropped')).toBe(true)
+  })
+
+  it('still escalates into the following week when that week is genuinely ahead', () => {
+    // Week 1 is walled off by frozen fillers, so the essentials must escalate —
+    // and with `today` inside week 1, week 2 is a legitimate target.
+    const fillers = [1, 2, 3, 4, 5, 6].map((day, index) =>
+      fillerSession(`fill${String(index)}`, 1, index + 1, `2026-08-0${String(day + 2)}`))
+    const result = recomputeQueue(input({
+      today: '2026-08-03',
+      templates: [...weekTemplates(1).filter((t) => t.priority === 'essential'), ...fillers.map((f) => f.template)],
+      events: fillers.map((f) => f.occupyingEvent),
+    }))
+    const escalated = result.instances.filter((i) => i.scheduledDate !== null && i.scheduledDate >= '2026-08-10')
+    expect(escalated.length).toBeGreaterThan(0)
+  })
+})
+
 describe('priority ladder invariant holds across every scenario in this file (Finding A, requirement 2)', () => {
   it('never lets a lower-priority session crowd an essential out of a day it could have used, in any recorded run', () => {
     // `allRuns` is populated by the `recomputeQueue` wrapper at the top of

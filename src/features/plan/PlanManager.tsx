@@ -7,6 +7,7 @@ import {
   resetRecommendations, restoreSeedPlanPreservingHistory, setActivePlan, syncQueue,
 } from '@/data/repositories'
 import { activePlanCoreWeeks } from './planData'
+import { RealignSection } from './RealignSection'
 
 interface PlanManagerProps {
   today: string
@@ -94,6 +95,11 @@ export const PlanManager: FC<PlanManagerProps> = ({ today, onClose }) => {
         </ul>
       </section>
 
+      {/* Above Duration on purpose: when the schedule has drifted this is the
+          action the athlete actually wants, and hand-editing the week count is
+          the blunter instrument they would otherwise reach for. */}
+      <RealignSection today={today} />
+
       <section className="plan-manager__section">
         <h3>Duration</h3>
         <label htmlFor="plan-manager-duration">Core weeks</label>
@@ -125,6 +131,10 @@ export const PlanManager: FC<PlanManagerProps> = ({ today, onClose }) => {
         >
           Reset schedule recommendations
         </Button>
+        <p className="plan-manager__hint">
+          Clears pinned moves and reschedules only, leaving the plan where it is. Use Realign above
+          if the plan itself has drifted out of step with your training.
+        </p>
       </section>
 
       <Button onClick={onClose}>Close</Button>

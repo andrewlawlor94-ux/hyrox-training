@@ -67,11 +67,19 @@ function attemptOwnWeek(inst: OpenInstance, occupied: OccupiedDay[], today: ISOD
 }
 
 /** Step 9's single escalation for `important`/`essential`: the following
- * plan week, tried exactly once. */
-function attemptFollowingWeek(inst: OpenInstance, occupied: OccupiedDay[], raceDate: ISODate, planStartDate: ISODate): ISODate | null {
+ * plan week, tried exactly once.
+ *
+ * Scans from `max(today, that week's Monday)`, exactly as `attemptOwnWeek` does.
+ * It previously started unconditionally at the Monday, which let the escalation
+ * place a session on a date that had already gone: a plan week entirely in the
+ * past would fail `attemptOwnWeek` (which does respect `today`) and then land
+ * here on, say, last Tuesday — `upcoming` for ever, on a day that cannot be
+ * trained and will never come round again. A week wholly in the past now yields
+ * no candidate and the session drops, which is the honest outcome. */
+function attemptFollowingWeek(inst: OpenInstance, occupied: OccupiedDay[], today: ISODate, raceDate: ISODate, planStartDate: ISODate): ISODate | null {
   const nextWeekNumber = inst.weekNumber + 1
   const nextWeekMonday = addDays(planStartDate, (nextWeekNumber - 1) * DAYS_PER_WEEK)
-  const days = candidateDaysForWeek(planStartDate, nextWeekNumber, nextWeekMonday, raceDate)
+  const days = candidateDaysForWeek(planStartDate, nextWeekNumber, laterOf(today, nextWeekMonday), raceDate)
   return firstEligibleDay(days, inst.recoveryTags, occupied, raceDate)
 }
 
@@ -168,7 +176,7 @@ export function placeOpenInstances(
       continue
     }
 
-    const followingWeek = attemptFollowingWeek(inst, occupied, raceDate, planStartDate)
+    const followingWeek = attemptFollowingWeek(inst, occupied, today, raceDate, planStartDate)
     if (followingWeek !== null) {
       place(inst, followingWeek)
       continue

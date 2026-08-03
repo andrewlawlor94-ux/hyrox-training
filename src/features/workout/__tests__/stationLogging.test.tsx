@@ -223,6 +223,12 @@ describe('station logging', () => {
       expect(logs[0]?.distanceM).toBe(1000)
       expect(logs[0]?.timeSec).toBe(210)
       expect(logs[0]?.load).toBeUndefined()
-    }, { timeout: 3000 })
+      // 3s was not enough under full-suite contention: two independent writes
+      // have to land (distance through the 250ms autosave debounce, time through
+      // its blur flush), and the run that failed had the row created with
+      // `timeSec` still missing at 3.2s. Waiting longer is the honest fix — the
+      // assertion stays strict, and the suite's own 20s test budget still catches
+      // a genuine regression.
+    }, { timeout: 10_000 })
   })
 })
