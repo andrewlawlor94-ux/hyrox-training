@@ -45,7 +45,11 @@ const BODYWEIGHT_SQUAT: WarmupDrill = {
   id: 'bodyweight_squat',
   name: 'Bodyweight squat',
   dose: '10 reps, pausing at the bottom',
-  why: 'Grooves the pattern and checks depth before adding load',
+  // Deliberately not "checks depth before adding load": this drill is also
+  // prescribed for sleds, wall balls and the rower, where there is no bar and
+  // no depth standard, and a reason that only fits barbell squatting reads as
+  // nonsense on those sessions.
+  why: 'Grooves the squat pattern and wakes the legs up before they have to drive',
 }
 const HINGE_DOWEL: WarmupDrill = {
   id: 'hinge_dowel',
@@ -87,7 +91,10 @@ const ANKLE_BOUNCES: WarmupDrill = {
   id: 'ankle_bounces',
   name: 'Ankle bounces',
   dose: '20 reps, stiff ankles',
-  why: 'Preloads the calf and Achilles before running or driving a sled',
+  // Also prescribed for burpee broad jumps and calf work, neither of which is
+  // running or sled driving — so the reason says what it prepares, not which
+  // session asked for it.
+  why: 'Preloads the calf and Achilles before they take repeated impact',
 }
 const LEG_SWINGS: WarmupDrill = {
   id: 'leg_swings',
@@ -111,13 +118,40 @@ const THORACIC_REACH: WarmupDrill = {
   id: 'thoracic_reach',
   name: 'Overhead reach',
   dose: '8 per side',
-  why: 'Upper-back extension so the ball can be caught and thrown overhead',
+  // Seen in the browser reading "so the ball can be caught and thrown overhead"
+  // on a SkiErg session, which prescribes no ball at all. Phrased by what the
+  // drill DOES, so it holds for every session that asks for it.
+  why: 'Upper-back extension, so the arms reach overhead without the lower back arching',
 }
 const ERG_RAMP: WarmupDrill = {
   id: 'erg_ramp',
   name: 'Easy minutes on the machine',
   dose: '2-3 minutes, building',
   why: 'Raises heart rate and rehearses the stroke before the effort',
+}
+const ARM_CIRCLES: WarmupDrill = {
+  id: 'arm_circles',
+  name: 'Arm circles',
+  dose: '10 each direction',
+  why: 'Frees the shoulders before several thousand metres of pulling',
+}
+const SKI_STROKE_BUILD: WarmupDrill = {
+  id: 'ski_stroke_build',
+  name: 'Build-up strokes',
+  dose: '10 arms only, 10 arms and trunk, 10 full',
+  why: 'Adds one part of the SkiErg stroke at a time, so the first hard pull is not the first full one',
+}
+const ROW_STROKE_BUILD: WarmupDrill = {
+  id: 'row_stroke_build',
+  name: 'Legs-only strokes',
+  dose: '10 legs only, 10 legs and body, 10 full',
+  why: 'The standard rowing build-up — it puts the drive back in the right order before you pull hard',
+}
+const STRIDES: WarmupDrill = {
+  id: 'strides',
+  name: 'Strides',
+  dose: '4 x 20 seconds, building to target pace',
+  why: 'Opens the stride and primes race pace, so the first interval is not a cold start',
 }
 const FARMER_MARCH: WarmupDrill = {
   id: 'farmer_march',
@@ -151,7 +185,12 @@ const DRILLS_BY_CATEGORY: Readonly<Record<ExerciseCategory, readonly WarmupDrill
   core: [CAT_CAMEL, DEAD_BUG],
   carry: [DEAD_HANG, FARMER_MARCH],
   sled: [ANKLE_BOUNCES, GLUTE_BRIDGE, BODYWEIGHT_SQUAT],
-  erg: [ERG_RAMP],
+  // Baseline for any machine with a handle. The two the plan actually
+  // prescribes — SkiErg and rower — have their own lists in
+  // `DRILLS_BY_EXERCISE_ID`, because their demands genuinely differ and one
+  // shared list serves neither well. This is what an erg the athlete adds
+  // themselves falls back to.
+  erg: [ARM_CIRCLES, BAND_PULL_APART, ERG_RAMP],
   plyo: [ANKLE_BOUNCES, POGO_HOPS],
   run: [LEG_SWINGS, ANKLE_BOUNCES, CALF_RAISE_WARM, A_SKIPS],
   wallBall: [THORACIC_REACH, BODYWEIGHT_SQUAT],
@@ -163,21 +202,64 @@ const DRILLS_BY_CATEGORY: Readonly<Record<ExerciseCategory, readonly WarmupDrill
 }
 
 /**
+ * Movements whose own warm-up differs from what their category implies, keyed by
+ * exercise id.
+ *
+ * Category is the right unit almost everywhere, but not for conditioning, and
+ * the athlete found it: a Zone 2 session is a single `erg` exercise, so the whole
+ * warm-up was one line. Worse, SkiErg and rower share that category while
+ * needing near-opposite preparation — the SkiErg is overhead lat and trunk work,
+ * the row is a leg drive that finishes with the back. One shared `erg` list
+ * serves neither.
+ *
+ * Only movements that genuinely need it appear here; everything else falls
+ * through to its category, and an unknown id simply falls through too, so this
+ * table can never make a session's warm-up disappear.
+ */
+const DRILLS_BY_EXERCISE_ID: Readonly<Record<string, readonly WarmupDrill[]>> = {
+  // Overhead, lat-driven, and unforgiving of a cold thoracic spine.
+  ex_ski_erg: [ARM_CIRCLES, BAND_PULL_APART, THORACIC_REACH, ERG_RAMP, SKI_STROKE_BUILD],
+  // Legs first, then body, then arms — the warm-up mirrors the stroke.
+  ex_row: [CAT_CAMEL, BAND_PULL_APART, BODYWEIGHT_SQUAT, ERG_RAMP, ROW_STROKE_BUILD],
+  // The one run type where a cold start actually costs you: intervals and tempo
+  // begin at pace, so the run's own first mile cannot be the warm-up.
+  ex_quality_run: [LEG_SWINGS, ANKLE_BOUNCES, CALF_RAISE_WARM, A_SKIPS, STRIDES],
+}
+
+/** The minimum a warm-up needs to know about a prescribed movement. An
+ * `Exercise` row satisfies it structurally, so callers pass theirs straight in. */
+export interface WarmupSubject {
+  id: string
+  category: ExerciseCategory
+}
+
+/**
  * The warm-up for a whole session: the union of what its movements need, each
  * drill once, in a stable order.
  *
- * Ordered by CATEGORY position in the session rather than alphabetically, so the
- * drills for the first real exercise come first — an athlete works down the list
- * and then starts lifting. Deduplicated because a squat-and-hinge day would
- * otherwise ask for dead bugs twice.
+ * Ordered by the movement's position in the session rather than alphabetically,
+ * so the drills for the first real exercise come first — an athlete works down
+ * the list and then starts training. Deduplicated because a squat-and-hinge day
+ * would otherwise ask for dead bugs twice.
  *
- * Pure: takes the categories, returns drills. No clock, no I/O.
+ * Each movement contributes its own per-exercise list if it has one, otherwise
+ * its category's.
+ *
+ * Pure: takes the movements, returns drills. No clock, no I/O.
  */
-export function warmupDrillsFor(categories: readonly ExerciseCategory[]): WarmupDrill[] {
+export function warmupDrillsFor(exercises: readonly WarmupSubject[]): WarmupDrill[] {
   const seen = new Set<string>()
   const drills: WarmupDrill[] = []
-  for (const category of categories) {
-    for (const drill of DRILLS_BY_CATEGORY[category]) {
+  for (const exercise of exercises) {
+    // `?? []` is not dead code despite `ExerciseCategory` being a closed union:
+    // an exercise row read back from an older database (or a hand-imported
+    // backup) can carry a category this table has never heard of, and iterating
+    // `undefined` would throw during render and take the whole workout screen
+    // down with it. Contributing nothing is already a valid outcome here — see
+    // `accessory` — so falling back to it costs the athlete a warm-up, not
+    // their session.
+    const list = DRILLS_BY_EXERCISE_ID[exercise.id] ?? DRILLS_BY_CATEGORY[exercise.category] ?? []
+    for (const drill of list) {
       if (seen.has(drill.id)) continue
       seen.add(drill.id)
       drills.push(drill)

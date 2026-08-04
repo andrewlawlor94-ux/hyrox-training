@@ -35,7 +35,7 @@ export const WorkoutScreen: FC = () => {
         </div>
         {/* Before the exercises, because a warm-up comes first. Derived from the
             session's own movements, in the order they are prescribed. */}
-        <WarmupCard categories={data.exercises.map((item) => item.exercise.category)} />
+        <WarmupCard exercises={data.exercises.map((item) => item.exercise)} />
 
         {data.exercises.length === 0 ? (
           <EmptyState

@@ -1,12 +1,13 @@
 import type { FC } from 'react'
 import { Card } from '@/components'
-import type { ExerciseCategory } from '@/data/types'
+import type { WarmupSubject } from '@/domain/warmup/drills'
 import { warmupDrillsFor } from '@/domain/warmup/drills'
 
 interface WarmupCardProps {
-  /** Every prescribed exercise's category, in session order. Order matters: the
-   * drills for the first exercise come first. */
-  categories: readonly ExerciseCategory[]
+  /** Every prescribed exercise, in session order. Order matters: the drills for
+   * the first exercise come first. Passed whole rather than as categories so a
+   * SkiErg and a rower can be told apart — see `DRILLS_BY_EXERCISE_ID`. */
+  exercises: readonly WarmupSubject[]
 }
 
 /**
@@ -23,8 +24,8 @@ interface WarmupCardProps {
  * Renders nothing at all when the session's movements suggest nothing, rather
  * than an empty card.
  */
-export const WarmupCard: FC<WarmupCardProps> = ({ categories }) => {
-  const drills = warmupDrillsFor(categories)
+export const WarmupCard: FC<WarmupCardProps> = ({ exercises }) => {
+  const drills = warmupDrillsFor(exercises)
   if (drills.length === 0) return null
 
   return (
