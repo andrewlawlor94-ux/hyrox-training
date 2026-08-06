@@ -1,6 +1,6 @@
 import type { ChangeEvent, FC } from 'react'
 import { useState } from 'react'
-import { Button, NumberField } from '@/components'
+import { Button, DurationField, NumberField } from '@/components'
 import type { ExerciseCategory, LoadStyle, MeasurementType, Unit } from '@/data/types'
 import { CATEGORY_OPTIONS, LOAD_STYLE_OPTIONS, MEASUREMENT_TYPE_OPTIONS, UNIT_OPTIONS } from './constants'
 import { isFormComplete } from './formValues'
@@ -111,9 +111,9 @@ export const ExerciseForm: FC<ExerciseFormProps> = ({ initial, submitLabel, onSa
       </div>
 
       <div className="exercise-form__grid">
-        <NumberField
-          id="exercise-form-rest" label="Default rest" unit="sec" inputMode="numeric"
-          value={values.defaultRestSec} onChange={(v) => { set('defaultRestSec', v) }}
+        <DurationField
+          id="exercise-form-rest" label="Default rest"
+          valueSec={values.defaultRestSec} onCommit={(v) => { set('defaultRestSec', v) }}
         />
         <NumberField
           id="exercise-form-increment" label="Progression increment" unit={values.defaultUnit} inputMode="decimal"
@@ -131,7 +131,7 @@ export const ExerciseForm: FC<ExerciseFormProps> = ({ initial, submitLabel, onSa
       <h3 className="exercise-form__section-heading">Distance or duration defaults (optional)</h3>
       <div className="exercise-form__grid">
         <NumberField id="exercise-form-distance" label="Default distance" unit="m" inputMode="decimal" value={values.defaultDistanceM} onChange={(v) => { set('defaultDistanceM', v) }} />
-        <NumberField id="exercise-form-duration" label="Default duration" unit="sec" inputMode="numeric" value={values.defaultDurationSec} onChange={(v) => { set('defaultDurationSec', v) }} />
+        <DurationField id="exercise-form-duration" label="Default duration" valueSec={values.defaultDurationSec} onCommit={(v) => { set('defaultDurationSec', v) }} />
       </div>
 
       <div className="library-field">

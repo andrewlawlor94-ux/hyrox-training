@@ -12,6 +12,16 @@ export interface SplitSummary {
   workCount: number
   totalWorkDistanceM: number
   totalSessionDistanceM: number
+  /**
+   * Every split's duration added up — warm-up, work, recovery and cool-down.
+   *
+   * This is what an interval session's total duration IS. Without it the run
+   * had no total to store unless the athlete typed one by hand into a separate
+   * field, and `RunBlock` refuses to save a run missing its duration — so a
+   * quality session with every rep filled in saved nothing at all. That was the
+   * athlete's "quality run isn't actually logging data".
+   */
+  totalSessionDurationSec: number
   totalWorkDurationSec: number
   meanWorkPaceSecPerKm: number | null
   fastestWorkPaceSecPerKm: number | null
@@ -38,6 +48,7 @@ export function summarizeSplits(splits: SplitInput[]): SplitSummary {
   let totalWorkDistanceM = 0
   let totalWorkDurationSec = 0
   let totalSessionDistanceM = 0
+  let totalSessionDurationSec = 0
   let pacedWorkDistanceM = 0
   let pacedWorkDurationSec = 0
   let fastestWorkPaceSecPerKm: number | null = null
@@ -45,6 +56,7 @@ export function summarizeSplits(splits: SplitInput[]): SplitSummary {
 
   for (const split of splits) {
     if (split.distanceM !== undefined) totalSessionDistanceM += split.distanceM
+    if (split.durationSec !== undefined) totalSessionDurationSec += split.durationSec
     if (split.kind !== WORK_KIND) continue
 
     workCount += 1
@@ -70,6 +82,7 @@ export function summarizeSplits(splits: SplitInput[]): SplitSummary {
     workCount,
     totalWorkDistanceM,
     totalSessionDistanceM,
+    totalSessionDurationSec,
     totalWorkDurationSec,
     meanWorkPaceSecPerKm,
     fastestWorkPaceSecPerKm,

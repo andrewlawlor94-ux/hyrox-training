@@ -489,14 +489,51 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
   min-height: var(--tap-min); color: var(--accent); font-weight: 600; text-align: left;
 }
 
-.interval-splits-editor { display: flex; flex-direction: column; gap: var(--space-3); border-top: 1px solid var(--border); padding-top: var(--space-3); }
-.interval-splits-editor__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
-.interval-splits-editor__mean-pace { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
-.interval-splits-editor__controls { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-.interval-splits-editor__controls .number-field { flex: 1 1 100px; min-width: 90px; }
-.interval-splits-editor__rows { display: flex; flex-direction: column; gap: var(--space-2); }
-.interval-splits-editor__row { display: flex; flex-wrap: wrap; gap: var(--space-2); background: var(--surface-2); border-radius: var(--radius-control); padding: var(--space-2); }
-.interval-splits-editor__row .number-field { flex: 1 1 100px; min-width: 90px; }
+/* An interval session in the order it is run: warm-up, work, cool-down. The
+   three sections are visually separate because the athlete could not tell which
+   numbers counted — the work reps are the only ones the pace comes from. */
+.interval-session { display: flex; flex-direction: column; gap: var(--space-4); border-top: 1px solid var(--border); padding-top: var(--space-3); }
+.interval-session__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.interval-session__target { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.interval-session__target-label { font-size: var(--font-size-sm); font-weight: 600; color: var(--text-muted); }
+.interval-session__mean-pace { margin: 0; font-weight: 600; }
+
+.interval-section { display: flex; flex-direction: column; gap: var(--space-2); }
+.interval-section__heading {
+  margin: 0; font-size: var(--font-size-sm); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted);
+}
+/* The work block is the one that counts, so it is the one that is boxed. */
+.interval-section--work {
+  background: var(--surface-2); border-radius: var(--radius-control);
+  padding: var(--space-3); gap: var(--space-3);
+}
+.interval-section__explainer { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
+.interval-section .number-field { max-width: 160px; }
+
+.interval-reps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.interval-rep { display: flex; flex-direction: column; gap: var(--space-2); }
+.interval-rep__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.interval-rep__number { font-weight: 700; }
+.interval-rep__pace { font-variant-numeric: tabular-nums; color: var(--text-muted); font-size: var(--font-size-sm); }
+.interval-rep__fields { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.interval-rep__fields .number-field { flex: 1 1 110px; min-width: 100px; max-width: none; }
+/* The recovery sits between reps, indented and rule-marked so it reads as the
+   gap between two efforts rather than a third effort. */
+.interval-rep__recovery {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2);
+  padding-left: var(--space-3); border-left: 2px solid var(--border);
+}
+.interval-rep__recovery .number-field { flex: 0 1 110px; min-width: 100px; max-width: none; }
+
+/* Per-exercise "is this on the record" state, with the deciding box named. */
+.logged-status { display: flex; flex-direction: column; gap: var(--space-1); align-items: flex-start; }
+.logged-status__hint { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
+.workout-footer__log-summary { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
+.workout-footer__log-summary strong { color: var(--text); }
+
+.run-block__totals { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
+.run-block__totals strong { color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* ---------- StationBlock / SledFields ---------- */
 .station-block__reference { margin: 0; color: var(--text-muted); font-size: var(--font-size-sm); }

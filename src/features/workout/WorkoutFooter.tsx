@@ -12,6 +12,7 @@ import { hasUrgentRedFlag } from '@/domain/symptoms/redFlags'
 import { RED_FLAG_SCREEN_SCIATIC_MIN } from '@/domain/symptoms/constants'
 import { RedFlagScreen } from '@/features/symptoms/RedFlagScreen'
 import { useAutosaveScope } from './autosaveScope'
+import type { SessionLogSummary } from './loggedState'
 import { CompletedEarlierSheet } from './CompletedEarlierSheet'
 import { CompletionActions } from './CompletionActions'
 import type { SymptomValues } from './SymptomCapture'
@@ -22,6 +23,17 @@ const BLANK_RED_FLAG_ANSWERS: RedFlagAnswers = { bowelBladder: false, saddleNumb
 interface WorkoutFooterProps {
   instance: WorkoutInstance
   today: ISODate
+  /** How much of the session is actually on the record, from
+   * `sessionLogSummary`. Stated before the athlete commits to "Completed", so
+   * "blank means I did not do it" is an informed choice rather than a silent
+   * rule they discover later in Progress. */
+  logSummary: SessionLogSummary
+}
+
+/** Joins names for a sentence: "A", "A and B", "A, B and C". */
+function nameList(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? ''
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1] ?? ''}`
 }
 
 /**
@@ -32,7 +44,7 @@ interface WorkoutFooterProps {
  * never start the write twice — `CompletionActions`' native `disabled` is
  * the second, defence-in-depth layer, not the only one.
  */
-export const WorkoutFooter: FC<WorkoutFooterProps> = ({ instance, today }) => {
+export const WorkoutFooter: FC<WorkoutFooterProps> = ({ instance, today, logSummary }) => {
   const navigate = useNavigate()
   const [values, setValues] = useState<SymptomValues>({ sessionRpe: 0, shinPain: 0, sciaticPain: 0 })
   const [redFlagAnswers, setRedFlagAnswers] = useState<RedFlagAnswers>(BLANK_RED_FLAG_ANSWERS)
@@ -131,6 +143,14 @@ export const WorkoutFooter: FC<WorkoutFooterProps> = ({ instance, today }) => {
 
   return (
     <div className="workout-footer">
+      {/* What "Completed" will actually record. An exercise whose own deciding
+          box is empty counts as not done (athlete: "when I log a workout and an
+          exercise is blank it should be assumed I didn't do it") — so it is named
+          here, before the tap, rather than quietly dropped. */}
+      <p className="workout-footer__log-summary">
+        <strong>{`${String(logSummary.loggedCount)} of ${String(logSummary.total)} logged`}</strong>
+        {logSummary.missing.length > 0 && ` — ${nameList(logSummary.missing)} ${logSummary.missing.length === 1 ? 'has' : 'have'} nothing recorded yet and will count as not done.`}
+      </p>
       <SymptomCapture idPrefix={`symptom-${instance.id}`} values={values} onChange={(patch) => { setValues((v) => ({ ...v, ...patch })) }} />
       {showRedFlag && <RedFlagScreen answers={redFlagAnswers} onChange={handleRedFlagChange} />}
       <CompletionActions

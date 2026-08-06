@@ -4,10 +4,11 @@ import type { IntervalSplit, RunLog, RunType, Surface } from '@/data/types'
 import { Card, Chip, DurationField, NumberField, SegmentedControl } from '@/components'
 import { deleteRunLog, saveRunLog } from '@/data/repositories'
 import { isPositiveFinite, paceSecPerKm } from '@/domain/pace/pace'
-import { splitPaceSecPerKm } from '@/domain/pace/intervals'
-import { formatPace } from '@/domain/units/format'
+import { splitPaceSecPerKm, summarizeSplits } from '@/domain/pace/intervals'
+import { formatDistanceM, formatDuration, formatPace } from '@/domain/units/format'
 import { DEFAULT_RUN_TYPE_BY_EXERCISE_ID, RUN_TYPE_OPTIONS, SURFACE_OPTIONS } from './constants'
 import { IntervalSplitsEditor } from './IntervalSplitsEditor'
+import { LoggedStatus } from './LoggedStatus'
 import type { DraftSplit } from './IntervalSplitsEditor'
 import { useAutosave } from './useAutosave'
 import type { RunExerciseVM } from './useWorkout'
@@ -40,6 +41,28 @@ function runTypeLabel(type: RunType): string {
  */
 function isLoggableRun(distanceKm: number | null, durationSec: number | null): boolean {
   return distanceKm !== null && durationSec !== null && isPositiveFinite(distanceKm) && isPositiveFinite(durationSec)
+}
+
+/**
+ * An interval session's own totals, added up from its splits.
+ *
+ * For an interval run the splits ARE the run: four reps plus a warm-up and a
+ * cool-down is the whole session, and its distance and duration are the sums of
+ * those parts. Asking for them a second time in separate top-level boxes gave
+ * the athlete two places to type the same fact and no way to tell which one
+ * counted — and because the top-level duration was the one `isLoggableRun`
+ * checked, a fully-filled quality session with that box left blank saved
+ * NOTHING. That was the athlete's "quality run isn't actually logging data".
+ *
+ * Returns `null` for a total that is not yet a real number, so a half-entered
+ * session is still refused rather than saved as a zero.
+ */
+function intervalTotals(drafts: DraftSplit[]): { distanceKm: number | null; durationSec: number | null } {
+  const summary = summarizeSplits(drafts)
+  return {
+    distanceKm: summary.totalSessionDistanceM > 0 ? summary.totalSessionDistanceM / M_PER_KM : null,
+    durationSec: summary.totalSessionDurationSec > 0 ? summary.totalSessionDurationSec : null,
+  }
 }
 
 function toIntervalSplits(runLogId: string, drafts: DraftSplit[]): IntervalSplit[] {
@@ -82,26 +105,36 @@ export const RunBlock: FC<{ item: RunExerciseVM }> = ({ item }) => {
   const [draftSplits, setDraftSplits] = useState<DraftSplit[]>([])
   const autosave = useAutosave()
 
-  const livePace = paceSecPerKm(distanceKm ?? 0, durationSec ?? 0)
+  /** An interval session is measured by its splits, not by one pair of overall
+   * boxes — see `intervalTotals`. Either the program prescribed intervals, or a
+   * previously-saved log already has splits. */
+  const isIntervalSession = prescription.intervalSpec !== undefined || splits.length > 0
+  const liveTotals = isIntervalSession ? intervalTotals(draftSplits) : { distanceKm, durationSec }
+  const livePace = paceSecPerKm(liveTotals.distanceKm ?? 0, liveTotals.durationSec ?? 0)
   const runLogId = log?.id ?? `rl_${prescription.id}`
 
   function scheduleSave(
     patch: { distanceKm?: number | null; durationSec?: number | null; surface?: Surface; runType?: RunType; notes?: string },
     splitsOverride?: DraftSplit[],
   ): void {
-    const merged = {
-      distanceKm: patch.distanceKm !== undefined ? patch.distanceKm : distanceKm,
-      durationSec: patch.durationSec !== undefined ? patch.durationSec : durationSec,
-      surface: patch.surface ?? surface,
-      runType: patch.runType ?? runType,
-      notes: patch.notes ?? notes,
-    }
     // Captured here, synchronously, rather than read back off `draftSplits`
     // inside the scheduled closure below — a caller updating splits and
     // scheduling a save in the same handler (`handleSplitsChange`) would
     // otherwise see the PRE-update state, since `setDraftSplits` doesn't
     // apply until the next render.
     const splitsToSave = splitsOverride ?? draftSplits
+    const totals = isIntervalSession
+      ? intervalTotals(splitsToSave)
+      : {
+        distanceKm: patch.distanceKm !== undefined ? patch.distanceKm : distanceKm,
+        durationSec: patch.durationSec !== undefined ? patch.durationSec : durationSec,
+      }
+    const merged = {
+      ...totals,
+      surface: patch.surface ?? surface,
+      runType: patch.runType ?? runType,
+      notes: patch.notes ?? notes,
+    }
     autosave.schedule(prescription.id, async () => {
       if (!isLoggableRun(merged.distanceKm, merged.durationSec)) {
         // Nothing valid to log. If a row already exists — the athlete
@@ -132,34 +165,53 @@ export const RunBlock: FC<{ item: RunExerciseVM }> = ({ item }) => {
     // when there is either a genuinely loggable run right now, or a
     // previously-saved log that might need clearing (I3). Otherwise this
     // would fire a pointless "delete a row that never existed" on every
-    // mount.
-    if (isLoggableRun(distanceKm, durationSec) || log) scheduleSave({}, drafts)
+    // mount. For an interval session the splits themselves decide that, which
+    // is what makes editing a rep actually save the session.
+    const totals = isIntervalSession ? intervalTotals(drafts) : { distanceKm, durationSec }
+    if (isLoggableRun(totals.distanceKm, totals.durationSec) || log) scheduleSave({}, drafts)
   }
 
   return (
     <Card as="article" className="exercise-card run-block">
       <h3 className="exercise-card__name">{exercise.name}</h3>
+      <LoggedStatus item={item} />
       <div className="run-block__pace-row">
         <p className="run-block__pace">{`Pace: ${formatPace(livePace)}`}</p>
         {goalTargetPaceSecPerKm !== null && <p className="run-block__goal-pace">{`Goal pace: ${formatPace(goalTargetPaceSecPerKm)}`}</p>}
       </div>
-      <div className="run-block__fields">
-        <NumberField id={`run-distance-${prescription.id}`} label="Distance" unit="km" value={distanceKm} onBlur={handleBlur}
-          onChange={(v) => { setDistanceKm(v); scheduleSave({ distanceKm: v }) }} />
-        {/* Minutes and seconds, not a raw seconds count. `DurationField` commits
-            on blur, so `handleBlur`'s flush is redundant for it — the commit
-            below schedules and flushes in one go. */}
-        <DurationField
-          id={`run-duration-${prescription.id}`}
-          label="Duration"
-          valueSec={durationSec}
-          onCommit={(v) => {
-            setDurationSec(v)
-            scheduleSave({ durationSec: v })
-            void autosave.flushKey(prescription.id)
-          }}
-        />
-      </div>
+
+      {/* An interval session's distance and duration are the sums of its splits,
+          so they are STATED here rather than asked for again below — see
+          `intervalTotals` for the defect that came of asking twice. */}
+      {isIntervalSession ? (
+        <p className="run-block__totals">
+          {'Session total: '}
+          <strong>
+            {liveTotals.distanceKm === null ? '—' : formatDistanceM(liveTotals.distanceKm * M_PER_KM)}
+            {' · '}
+            {liveTotals.durationSec === null ? '—' : formatDuration(liveTotals.durationSec)}
+          </strong>
+          {' — added up from the splits below'}
+        </p>
+      ) : (
+        <div className="run-block__fields">
+          <NumberField id={`run-distance-${prescription.id}`} label="Distance" unit="km" value={distanceKm} onBlur={handleBlur}
+            onChange={(v) => { setDistanceKm(v); scheduleSave({ distanceKm: v }) }} />
+          {/* Minutes and seconds, not a raw seconds count. `DurationField` commits
+              on blur, so `handleBlur`'s flush is redundant for it — the commit
+              below schedules and flushes in one go. */}
+          <DurationField
+            id={`run-duration-${prescription.id}`}
+            label="Duration"
+            valueSec={durationSec}
+            onCommit={(v) => {
+              setDurationSec(v)
+              scheduleSave({ durationSec: v })
+              void autosave.flushKey(prescription.id)
+            }}
+          />
+        </div>
+      )}
       <SegmentedControl label="Surface" value={surface} onChange={(v) => { setSurface(v); scheduleSave({ surface: v }) }} options={SURFACE_OPTIONS} />
 
       {/* The run type is PRESCRIBED, not chosen (athlete: "it should tell me what

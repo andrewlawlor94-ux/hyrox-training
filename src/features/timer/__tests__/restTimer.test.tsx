@@ -10,9 +10,15 @@ const T0 = '2026-07-27T10:00:00.000Z'
 const T0_PLUS_30S = '2026-07-27T10:00:30.000Z'
 const T0_PLUS_95S = '2026-07-27T10:01:35.000Z'
 /* A 60s timer started at T0 expires at T0+60s, so these are 10s and 60s past
- * expiry — either side of the 30s expired-linger window. */
+ * expiry. Both now count as "you just missed it" — the linger window is measured
+ * from when the expiry is NOTICED, so a rest that ran out while the athlete was
+ * in another app survives long enough to be read. `T0_PLUS_2H` is past
+ * `STALE_EXPIRY_SEC`, where an expiry stops being a missed rest and becomes
+ * yesterday's history. */
 const T0_PLUS_70S = '2026-07-27T10:01:10.000Z'
 const T0_PLUS_120S = '2026-07-27T10:02:00.000Z'
+const T0_PLUS_155S = '2026-07-27T10:02:35.000Z'
+const T0_PLUS_2H = '2026-07-27T12:00:00.000Z'
 const REAL_WAIT_TIMEOUT_MS = 2000
 
 /** jsdom doesn't resolve CSS custom properties in getComputedStyle — same
@@ -206,8 +212,10 @@ describe('RestTimerBar', () => {
       render(<RestTimerBar />)
       await screen.findByText('1:00')
 
+      // 10s past expiry, so it says how long ago rather than implying it just
+      // went off — the athlete may have been in another app for those 10s.
       vi.setSystemTime(new Date(T0_PLUS_70S))
-      await waitFor(() => expect(screen.getByText('Rest complete')).toBeInTheDocument(), { timeout: REAL_WAIT_TIMEOUT_MS })
+      await waitFor(() => expect(screen.getByText('Rest finished 0:10 ago')).toBeInTheDocument(), { timeout: REAL_WAIT_TIMEOUT_MS })
 
       expect(screen.getByText('0:00')).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /pause/i })).toBeNull()
@@ -220,22 +228,42 @@ describe('RestTimerBar', () => {
       expect(await getTimerState()).toBeDefined()
     })
 
-    it('clears itself once the rest has been over for the linger window', async () => {
+    it('clears itself once the expiry has been on screen for the linger window', async () => {
       await startTimer({ label: 'Back squat', totalSec: 60, now: T0 })
       const { container } = render(<RestTimerBar />)
       await screen.findByText('1:00')
 
+      // Notice the expiry first...
       vi.setSystemTime(new Date(T0_PLUS_120S))
+      await waitFor(() => expect(screen.getByText(/Rest finished/)).toBeInTheDocument(), { timeout: REAL_WAIT_TIMEOUT_MS })
+      expect(await getTimerState()).toBeDefined()
+
+      // ...then let the linger window pass from that moment.
+      vi.setSystemTime(new Date(T0_PLUS_155S))
       await waitFor(async () => { expect(await getTimerState()).toBeUndefined() }, { timeout: REAL_WAIT_TIMEOUT_MS })
       await waitFor(() => { expect(container).toBeEmptyDOMElement() }, { timeout: REAL_WAIT_TIMEOUT_MS })
     })
 
-    it('a timer that expired long before this mount is gone immediately, not lingering another 30s', async () => {
-      // Measured from the stored `endsAt`, never from a countdown this
-      // component starts — which is what makes a reopened app show no stale
-      // 0:00 from a session that ended hours ago.
+    /**
+     * The athlete's "the timer doesn't go off if I'm in another app". It cannot
+     * always sound while they are away, so the least it can do is not pretend
+     * nothing happened: a rest that ran out a minute ago stays on screen and says
+     * so, instead of vanishing before it can be read.
+     */
+    it('a rest that ran out while the athlete was away says how long ago, and waits to be read', async () => {
       await startTimer({ label: 'Back squat', totalSec: 60, now: T0 })
       vi.setSystemTime(new Date(T0_PLUS_120S))
+
+      render(<RestTimerBar />)
+      expect(await screen.findByText('Rest finished 1:00 ago')).toBeInTheDocument()
+      expect(await getTimerState()).toBeDefined()
+    })
+
+    it('a timer that expired hours ago is gone immediately, silently, not resurrected', async () => {
+      // A reopened app must not alarm for a session that ended yesterday, and
+      // must not show a stale 0:00 either.
+      await startTimer({ label: 'Back squat', totalSec: 60, now: T0 })
+      vi.setSystemTime(new Date(T0_PLUS_2H))
 
       const { container } = render(<RestTimerBar />)
       await waitFor(async () => { expect(await getTimerState()).toBeUndefined() }, { timeout: REAL_WAIT_TIMEOUT_MS })

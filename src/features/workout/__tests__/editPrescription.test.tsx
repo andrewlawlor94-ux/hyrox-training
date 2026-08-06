@@ -84,9 +84,12 @@ async function openEditSheet(): Promise<HTMLElement> {
   return dialog
 }
 
-function setRestSeconds(dialog: HTMLElement, value: string): void {
+/** Types a clock into the Rest field and commits it. `DurationField` commits on
+ * blur, so the blur is not incidental — it is where the value lands. */
+function setRestClock(dialog: HTMLElement, digits: string): void {
   const input = within(dialog).getByLabelText(/rest/i)
-  fireEvent.change(input, { target: { value } })
+  fireEvent.change(input, { target: { value: digits } })
+  fireEvent.blur(input)
 }
 
 function chooseScope(dialog: HTMLElement, label: string): void {
@@ -122,7 +125,7 @@ describe('editing a prescription from the workout screen', () => {
 
     await renderWorkout('wi_today')
     const dialog = await openEditSheet()
-    setRestSeconds(dialog, '200')
+    setRestClock(dialog, '320') // 3:20 = 200s
     chooseScope(dialog, 'Just this workout')
     await apply(dialog)
 
@@ -143,7 +146,7 @@ describe('editing a prescription from the workout screen', () => {
 
     await renderWorkout('wi_today')
     const dialog = await openEditSheet()
-    setRestSeconds(dialog, '220')
+    setRestClock(dialog, '340') // 3:40 = 220s
     chooseScope(dialog, 'This and future sessions')
     await apply(dialog)
 
@@ -168,7 +171,7 @@ describe('editing a prescription from the workout screen', () => {
 
     await renderWorkout('wi_today')
     const dialog = await openEditSheet()
-    setRestSeconds(dialog, '300')
+    setRestClock(dialog, '500') // 5:00 = 300s
     chooseScope(dialog, 'Change the exercise default only')
     await apply(dialog)
 

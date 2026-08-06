@@ -149,19 +149,34 @@ describe('run logging', () => {
       const logs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
       expect(logs[0]?.durationSec).toBe(28 * 60 + 30)
     })
+  })
 
-    // A bare number means MINUTES, and the field shows how it was read so a
-    // mistyped value is visible rather than silently stored.
-    fireEvent.change(durationInput, { target: { value: '45' } })
+  /**
+   * The athlete's instruction: "take the input as the first two digits are
+   * minutes and second two are seconds". Digits fill from the seconds end and
+   * the field shows the clock as it is built, so nothing has to be guessed —
+   * which is what makes it safe that a bare '45' now means 45 SECONDS rather
+   * than the 45 minutes it used to mean.
+   */
+  it('masks a duration as it is typed, digits filling from the seconds end', async () => {
+    const instanceId = await createRunWorkout([{ exerciseId: 'ex_easy_run' }])
+    await renderWorkout(instanceId)
+
+    const durationInput = screen.getByLabelText<HTMLInputElement>(/duration/i)
+    for (const [typed, shown] of [['4', '0:04'], ['45', '0:45'], ['453', '4:53'], ['4530', '45:30']] as const) {
+      fireEvent.change(durationInput, { target: { value: typed } })
+      expect(durationInput.value, typed).toBe(shown)
+    }
+
+    fireEvent.change(screen.getByLabelText(/distance/i), { target: { value: '5' } })
     fireEvent.blur(durationInput)
-    await waitFor(() => { expect(durationInput.value).toBe('45:00') })
     await waitFor(async () => {
       const logs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
-      expect(logs[0]?.durationSec).toBe(45 * 60)
+      expect(logs[0]?.durationSec).toBe(45 * 60 + 30)
     })
   })
 
-  it('refuses an unparseable duration rather than committing null and deleting the run', async () => {
+  it('never lets junk into a duration at all, so there is nothing to reject', async () => {
     const instanceId = await createRunWorkout([{ exerciseId: 'ex_easy_run' }])
     await renderWorkout(instanceId)
 
@@ -173,11 +188,13 @@ describe('run logging', () => {
       expect(await db.runLogs.where('instanceId').equals(instanceId).count()).toBe(1)
     })
 
-    fireEvent.change(durationInput, { target: { value: 'half an hour' } })
+    // Letters are dropped on the way in — the field keeps the digits it had, so
+    // unlike the old free-text field there is no invalid state to warn about and
+    // no way for junk to blank a real run.
+    fireEvent.change(durationInput, { target: { value: '30:00abc' } })
+    expect(durationInput.value).toBe('30:00')
     fireEvent.blur(durationInput)
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(/mm:ss/i)
-    // The junk is neither saved nor treated as "cleared" — the real run stands.
     const logs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
     expect(logs).toHaveLength(1)
     expect(logs[0]?.durationSec).toBe(1800)
@@ -293,62 +310,153 @@ describe('run logging', () => {
     expect(screen.queryByLabelText(/^reps/i)).toBeNull()
   })
 
-  it('opening the splits editor shows warm-up, reps, work distance/duration, recovery, and cooldown fields', async () => {
+  /**
+   * The layout the athlete asked for: "Quality Run needs to be laid out better.
+   * Explain the difference between warm up and work." The three phases are named
+   * sections, and each says in words whether it counts toward the work pace —
+   * which is the actual distinction, since `summarizeSplits` paces work reps
+   * only.
+   */
+  it('lays the session out as warm-up, work and cool-down, and says which counts', async () => {
     const instanceId = await createRunWorkout([{ exerciseId: 'ex_quality_run' }])
     await renderWorkout(instanceId)
 
     fireEvent.click(screen.getByRole('button', { name: /add splits/i }))
 
-    expect(screen.getByLabelText(/warm-up/i)).toBeInTheDocument()
+    for (const heading of ['Warm-up', 'Work', 'Cool-down']) {
+      expect(screen.getByRole('heading', { name: heading, level: 4 }), heading).toBeInTheDocument()
+    }
+    expect(screen.getByLabelText(/warm-up time/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/cool-down time/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/^reps$/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/work distance/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/work duration/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/^recovery$/i)).toBeInTheDocument()
-    expect(screen.getByLabelText(/cool-down/i)).toBeInTheDocument()
+
+    // Warm-up and cool-down say they are excluded; work says it is what counts.
+    expect(screen.getByText(/left out of your work pace/i)).toBeInTheDocument()
+    expect(screen.getByText(/kept out\s+of the work pace/i)).toBeInTheDocument()
+    expect(screen.getByText(/only splits your pace/i)).toBeInTheDocument()
+
+    // The uniform TARGET fields are gone — they duplicated the per-rep rows and
+    // left two places to type the same fact.
+    expect(screen.queryByLabelText(/^work distance$/i)).toBeNull()
+    expect(screen.queryByLabelText(/^work duration$/i)).toBeNull()
+    expect(screen.queryByLabelText(/^recovery$/i)).toBeNull()
   })
 
-  it('entering 5 reps generates 5 work rows plus recovery rows', async () => {
+  it('states the prescribed target rather than making it re-editable', async () => {
+    const instanceId = await createRunWorkout([{
+      exerciseId: 'ex_quality_run',
+      intervalSpec: { reps: 4, workDistanceM: 1000, recoverySec: 90 },
+    }])
+    await renderWorkout(instanceId)
+
+    expect(await screen.findByText('4 × 1000 m with 1:30 recovery')).toBeInTheDocument()
+  })
+
+  it('puts a recovery timer BETWEEN the reps, and never after the last one', async () => {
+    const instanceId = await createRunWorkout([{
+      exerciseId: 'ex_quality_run',
+      intervalSpec: { reps: 4, workDistanceM: 1000, recoverySec: 90 },
+    }])
+    await renderWorkout(instanceId)
+
+    // Four reps, three gaps. The athlete asked for "a timer between the four
+    // works" — after the last rep comes the cool-down, not another recovery.
+    expect(await screen.findAllByRole('button', { name: /start recovery/i })).toHaveLength(3)
+    expect(screen.getAllByLabelText(/^recovery \d+/i)).toHaveLength(3)
+  })
+
+  it('starts the shared rest timer from the recovery button, at the prescribed recovery', async () => {
+    const instanceId = await createRunWorkout([{
+      exerciseId: 'ex_quality_run',
+      intervalSpec: { reps: 2, workDistanceM: 1000, recoverySec: 90 },
+    }])
+    await renderWorkout(instanceId)
+
+    fireEvent.click((await screen.findAllByRole('button', { name: /start recovery/i }))[0]!)
+
+    const bar = await screen.findByRole('group', { name: 'Rest timer' })
+    expect(bar).toHaveTextContent('Recovery after rep 1')
+    expect(bar).toHaveTextContent('1:30')
+  })
+
+  it('entering 5 reps generates 5 work rows and the 4 recoveries between them', async () => {
     const instanceId = await createRunWorkout([{ exerciseId: 'ex_quality_run' }])
     await renderWorkout(instanceId)
     fireEvent.click(screen.getByRole('button', { name: /add splits/i }))
 
     fireEvent.change(screen.getByLabelText(/^reps$/i), { target: { value: '5' } })
 
-    expect(screen.getAllByLabelText(/^work \d+ duration/i)).toHaveLength(5)
-    expect(screen.getAllByLabelText(/^recovery \d+/i)).toHaveLength(5)
+    expect(screen.getAllByLabelText(/^work \d+ time/i)).toHaveLength(5)
+    expect(screen.getAllByLabelText(/^recovery \d+/i)).toHaveLength(4)
   })
 
-  it('shows the work-only mean pace from summarizeSplits', async () => {
+  it('shows a per-rep pace and the work-only mean, both from the splits', async () => {
     const instanceId = await createRunWorkout([{ exerciseId: 'ex_quality_run' }])
     await renderWorkout(instanceId)
     fireEvent.click(screen.getByRole('button', { name: /add splits/i }))
 
     fireEvent.change(screen.getByLabelText(/^reps$/i), { target: { value: '2' } })
-    fireEvent.change(screen.getByLabelText(/work 1 distance/i), { target: { value: '1000' } })
-    fireEvent.change(screen.getByLabelText(/work 1 duration/i), { target: { value: '240' } })
-    fireEvent.change(screen.getByLabelText(/work 2 distance/i), { target: { value: '1000' } })
-    fireEvent.change(screen.getByLabelText(/work 2 duration/i), { target: { value: '240' } })
+    for (const rep of [1, 2]) {
+      fireEvent.change(screen.getByLabelText(new RegExp(`^work ${String(rep)} distance`, 'i')), { target: { value: '1000' } })
+      const time = screen.getByLabelText(new RegExp(`^work ${String(rep)} time`, 'i'))
+      // '400' is 4:00 under the clock mask, not 400 seconds.
+      fireEvent.change(time, { target: { value: '400' } })
+      fireEvent.blur(time)
+    }
 
     expect(await screen.findByText(/Work-only mean pace: 4:00\/km/)).toBeInTheDocument()
+    // Each rep carries its own pace, so a fade across the set is visible.
+    expect(screen.getAllByText('4:00/km').length).toBeGreaterThanOrEqual(2)
+  })
+
+  /**
+   * The athlete's "quality run isn't actually logging data". An interval
+   * session's distance and duration ARE the sums of its splits, but the save
+   * gate checked two separate top-level boxes — and with the duration box blank
+   * (the interval prescription sets no overall duration) a fully-filled session
+   * saved nothing at all. The boxes are gone and the totals are derived.
+   */
+  it('saves an interval session from its reps alone, with no overall duration box to fill', async () => {
+    const instanceId = await createRunWorkout([{
+      exerciseId: 'ex_quality_run', distanceM: 1000,
+      intervalSpec: { warmupSec: 300, reps: 2, workDistanceM: 1000, recoverySec: 90, cooldownSec: 300 },
+    }])
+    await renderWorkout(instanceId)
+
+    // There is no overall Distance/Duration pair for an interval session.
+    expect(screen.queryByLabelText('Duration')).toBeNull()
+    expect(screen.queryByLabelText('Distance')).toBeNull()
+
+    for (const rep of [1, 2]) {
+      const time = await screen.findByLabelText(new RegExp(`^work ${String(rep)} time`, 'i'))
+      fireEvent.change(time, { target: { value: '400' } })
+      fireEvent.blur(time)
+    }
+
+    await waitFor(async () => {
+      const logs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
+      expect(logs).toHaveLength(1)
+      // 2 x 1000 m of work; warm-up and cool-down carry time but no distance.
+      expect(logs[0]?.distanceKm).toBe(2)
+      // 5:00 warm-up + 4:00 + 1:30 recovery + 4:00 + 5:00 cool-down.
+      expect(logs[0]?.durationSec).toBe(300 + 240 + 90 + 240 + 300)
+    })
   })
 
   it('saving persists IntervalSplit rows with correct index and kind', async () => {
     const instanceId = await createRunWorkout([{
-      exerciseId: 'ex_quality_run', distanceM: 1000, durationSec: 240,
-      intervalSpec: { reps: 2, workDistanceM: 1000, recoverySec: 90 },
+      exerciseId: 'ex_quality_run', distanceM: 1000,
+      intervalSpec: { reps: 2, workDistanceM: 1000, workSec: 240, recoverySec: 90 },
     }])
     await renderWorkout(instanceId)
-
-    fireEvent.change(screen.getByLabelText('Distance'), { target: { value: '2' } })
-    fireEvent.change(screen.getByLabelText('Duration'), { target: { value: '10:00' } })
-    fireEvent.blur(screen.getByLabelText('Duration'))
 
     await waitFor(async () => {
       const logs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
       expect(logs).toHaveLength(1)
       const splits = await db.intervalSplits.where('runLogId').equals(logs[0]!.id).sortBy('index')
-      expect(splits.map((s) => s.kind)).toEqual(['work', 'recovery', 'work', 'recovery'])
-      expect(splits.map((s) => s.index)).toEqual([0, 1, 2, 3])
+      // Recovery sits BETWEEN the reps: two reps, one recovery.
+      expect(splits.map((s) => s.kind)).toEqual(['work', 'recovery', 'work'])
+      expect(splits.map((s) => s.index)).toEqual([0, 1, 2])
     })
   })
 
@@ -363,6 +471,9 @@ describe('run logging', () => {
     expect(screen.getByLabelText(/^reps$/i)).toHaveValue('4')
     expect(screen.getAllByLabelText(/^work \d+ distance/i)).toHaveLength(4)
     expect(screen.getByLabelText<HTMLInputElement>(/^work 1 distance/i).value).toBe('1000')
+    // Durations are prefilled as clocks, not raw seconds.
+    expect(screen.getByLabelText<HTMLInputElement>(/warm-up time/i).value).toBe('5:00')
+    expect(screen.getByLabelText<HTMLInputElement>(/^recovery 1/i).value).toBe('1:30')
   })
 
   it('displays the goal-derived target pace for a race-pace prescription, and updates it when the goal changes', async () => {

@@ -6,6 +6,7 @@ import { saveStationLog } from '@/data/repositories'
 import { formatWithEquivalent } from '@/domain/units/format'
 import { STATION_BY_EXERCISE_ID } from './constants'
 import { stationReferenceText } from './stationReference'
+import { LoggedStatus } from './LoggedStatus'
 import { stationFieldSpec } from './stationFields'
 import { SledFields } from './SledFields'
 import { useAutosave } from './useAutosave'
@@ -98,6 +99,7 @@ export const StationBlock: FC<{ item: StationExerciseVM }> = ({ item }) => {
   return (
     <Card as="article" className="exercise-card station-block">
       <h3 className="exercise-card__name">{exercise.name}</h3>
+      <LoggedStatus item={item} />
       {referenceText && <p className="station-block__reference">{`Reference: ${referenceText}`}</p>}
 
       {/* Only the fields this station actually has — see `stationFields.ts`. A

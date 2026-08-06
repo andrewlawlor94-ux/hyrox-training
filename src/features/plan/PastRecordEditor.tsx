@@ -1,7 +1,7 @@
 import type { FC } from 'react'
 import { useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { NumberField } from '@/components'
+import { DurationField, NumberField } from '@/components'
 import { db } from '@/data/db'
 import { saveRunLog, saveStationLog, upsertSet } from '@/data/repositories'
 import type { RunLog, StationLog, StrengthSet } from '@/data/types'
@@ -156,9 +156,11 @@ export const PastRecordEditor: FC<PastRecordEditorProps> = ({ instanceId }) => {
             id={`past-run-distance-${log.id}`} label="Distance" value={log.distanceKm} unit="km"
             onChange={(v) => { handleRunChange(log, 'distanceKm', v) }} onBlur={() => { handleBlur(log.id) }} inputMode="decimal"
           />
-          <NumberField
-            id={`past-run-duration-${log.id}`} label="Duration" value={log.durationSec} unit="s"
-            onChange={(v) => { handleRunChange(log, 'durationSec', v) }} onBlur={() => { handleBlur(log.id) }} inputMode="numeric"
+          {/* mm:ss, like every other duration in the app — `DurationField`
+              commits on blur, which is where this editor already flushes. */}
+          <DurationField
+            id={`past-run-duration-${log.id}`} label="Duration" valueSec={log.durationSec}
+            onCommit={(v) => { handleRunChange(log, 'durationSec', v); handleBlur(log.id) }}
           />
         </div>
       ))}

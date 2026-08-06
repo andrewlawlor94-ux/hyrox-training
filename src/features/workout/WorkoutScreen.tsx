@@ -4,6 +4,7 @@ import { EmptyState } from '@/components'
 import { useToday } from '@/hooks/useToday'
 import { AutosaveScopeProvider } from './AutosaveScopeProvider'
 import { ExerciseCard } from './ExerciseCard'
+import { sessionLogSummary } from './loggedState'
 import { WarmupCard } from './WarmupCard'
 import { useWorkout } from './useWorkout'
 import { WorkoutFooter } from './WorkoutFooter'
@@ -49,7 +50,7 @@ export const WorkoutScreen: FC = () => {
             ))}
           </div>
         )}
-        <WorkoutFooter instance={data.instance} today={today} />
+        <WorkoutFooter instance={data.instance} today={today} logSummary={sessionLogSummary(data.exercises)} />
       </div>
     </AutosaveScopeProvider>
   )

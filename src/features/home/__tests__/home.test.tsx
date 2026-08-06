@@ -189,7 +189,9 @@ describe("Home: today's workout card", () => {
       await userEvent.click(await within(dialog).findByRole('button', { name: new RegExp(target.exercise.name) }))
     }
     const restInput = await within(dialog).findByLabelText(/rest/i)
-    fireEvent.change(restInput, { target: { value: '210' } })
+    // Rest is a clock now, not a raw seconds box: '330' is 3:30, i.e. 210s.
+    fireEvent.change(restInput, { target: { value: '330' } })
+    fireEvent.blur(restInput)
     fireEvent.click(within(dialog).getByLabelText('Just this workout'))
     await userEvent.click(within(dialog).getByRole('button', { name: 'Apply' }))
     await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })

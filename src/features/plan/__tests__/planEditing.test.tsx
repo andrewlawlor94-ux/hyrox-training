@@ -294,7 +294,8 @@ describe('the Plan tab / week browser', () => {
     const prescriptionDialog = (await screen.findAllByRole('dialog')).at(-1)!
     const restInput = await within(prescriptionDialog).findByLabelText(/rest/i)
     await userEvent.clear(restInput)
-    await userEvent.type(restInput, '200')
+    // A clock, not raw seconds: '320' is 3:20, i.e. 200s.
+    await userEvent.type(restInput, '320')
     await userEvent.click(within(prescriptionDialog).getByRole('button', { name: 'Save' }))
     const scopeDialog = (await screen.findAllByRole('dialog')).at(-1)!
     await userEvent.click(within(scopeDialog).getByLabelText('This and future sessions'))

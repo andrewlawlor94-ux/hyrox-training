@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   formatDistanceM, formatDuration, formatLoad, formatPace,
-  formatRaceTime, formatWithEquivalent, parseDuration, parseRaceTime,
+  clockDigitsFrom, formatClockDigits, formatRaceTime, formatWithEquivalent,
+  normalizeClockDigits, parseClockDigits, parseDuration, parseRaceTime,
 } from '../format'
 
 describe('formatLoad', () => {
@@ -89,8 +90,18 @@ describe('parseDuration', () => {
     expect(parseDuration('1:05:30')).toBe(3600 + 5 * 60 + 30)
   })
 
-  it('reads a bare number as minutes, matching how a run is prescribed', () => {
-    expect(parseDuration('45')).toBe(45 * 60)
+  /**
+   * Changed on the athlete's instruction: "take the input as the first two
+   * digits are minutes and second two are seconds". A bare number used to mean
+   * MINUTES, so '45' was 45 minutes; it is now 45 SECONDS, read the way a
+   * stopwatch reads it. Safe only because `DurationField` masks the entry and
+   * shows 0:45 as it is typed.
+   */
+  it('reads a bare run of digits as a clock entry, filling from the seconds end', () => {
+    expect(parseDuration('45')).toBe(45)
+    expect(parseDuration('45')).not.toBe(45 * 60)
+    expect(parseDuration('330')).toBe(3 * 60 + 30)
+    expect(parseDuration('2830')).toBe(28 * 60 + 30)
     expect(parseDuration('0')).toBe(0)
   })
 
@@ -114,6 +125,74 @@ describe('parseDuration', () => {
       const seconds = parseDuration(text)
       expect(seconds).not.toBeNull()
       expect(parseDuration(formatDuration(seconds as number))).toBe(seconds)
+    }
+  })
+})
+
+describe('clock digit entry', () => {
+  it('fills from the seconds end as digits are typed', () => {
+    expect(parseClockDigits('4')).toBe(4)
+    expect(parseClockDigits('45')).toBe(45)
+    expect(parseClockDigits('453')).toBe(4 * 60 + 53)
+    expect(parseClockDigits('4530')).toBe(45 * 60 + 30)
+    expect(parseClockDigits('14530')).toBe(3600 + 45 * 60 + 30)
+    expect(parseClockDigits('114530')).toBe(11 * 3600 + 45 * 60 + 30)
+  })
+
+  it('rejects a buffer that is not digits, or is longer than a clock', () => {
+    for (const junk of ['', 'ab', '1:30', '1234567']) {
+      expect(parseClockDigits(junk), junk).toBeNull()
+    }
+  })
+
+  /**
+   * The middle states are shown UN-normalised on purpose. Rendering '283'
+   * through parse-then-format would show 3:23, whose own digits are '323' — so
+   * the next keystroke and every backspace would act on digits the athlete never
+   * typed, and deleting would not undo typing.
+   */
+  it('shows the buffer as typed, so typing and deleting stay reversible', () => {
+    expect(formatClockDigits('')).toBe('')
+    expect(formatClockDigits('4')).toBe('0:04')
+    expect(formatClockDigits('45')).toBe('0:45')
+    expect(formatClockDigits('283')).toBe('2:83')
+    expect(formatClockDigits('2830')).toBe('28:30')
+    expect(formatClockDigits('12830')).toBe('1:28:30')
+  })
+
+  it('is exactly reversible: deleting a digit returns the previous display', () => {
+    const typed = '4530'
+    const seen = [1, 2, 3, 4].map((n) => formatClockDigits(typed.slice(0, n)))
+    expect(seen).toEqual(['0:04', '0:45', '4:53', '45:30'])
+    // Backspacing walks the same list back up.
+    for (let n = 4; n > 1; n -= 1) {
+      expect(formatClockDigits(typed.slice(0, n - 1))).toBe(seen[n - 2])
+    }
+  })
+
+  it('drops non-digits so a pasted clock still works', () => {
+    expect(normalizeClockDigits('28:30')).toBe('2830')
+    expect(normalizeClockDigits('1:05:30')).toBe('10530')
+    expect(normalizeClockDigits('abc')).toBe('')
+  })
+
+  it('keeps the rightmost digits when the buffer overflows a clock', () => {
+    // The seconds end is where entry happens, so the oldest digit falls off.
+    expect(normalizeClockDigits('1234567')).toBe('234567')
+  })
+
+  it('strips leading zeros without ever emptying the buffer', () => {
+    expect(normalizeClockDigits('045')).toBe('45')
+    expect(normalizeClockDigits('000')).toBe('0')
+    expect(formatClockDigits(normalizeClockDigits('000'))).toBe('0:00')
+  })
+
+  it('round-trips a stored value back into the buffer that produced it', () => {
+    for (const seconds of [0, 4, 45, 293, 1710, 3930, 42_330]) {
+      const digits = clockDigitsFrom(seconds)
+      expect(parseClockDigits(digits), String(seconds)).toBe(seconds)
+      // And the buffer is already canonical — re-normalising changes nothing.
+      expect(normalizeClockDigits(digits), String(seconds)).toBe(digits)
     }
   })
 })

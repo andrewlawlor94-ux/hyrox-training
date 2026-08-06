@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { completeSet, saveSetValues, undoSet } from '@/data/repositories'
 import type { StrengthSet, Unit } from '@/data/types'
 import { Button, Chip, NumberField } from '@/components'
+import { countsAsDone } from '@/domain/logging/primaryMeasure'
 import type { UseAutosaveResult } from './useAutosave'
 
 interface SetRowProps {
@@ -136,6 +137,13 @@ export const SetRow: FC<SetRowProps> = ({ set, index, defaultWeight, defaultUnit
 
   const rowNumber = index + 1
   const rowClassName = set.isCompleted ? 'set-row set-row--completed' : 'set-row'
+  // Reps are this movement's deciding box (`primaryMeasureFor('strengthSets')`),
+  // and the athlete's own rule for it: "with weights if I don't enter reps I
+  // didn't do it". Completing with the box empty wrote a set that claimed to
+  // have happened while recording no work — so the control is unavailable until
+  // there is a rep count, with the reason on the button rather than a failure
+  // after the tap.
+  const hasReps = countsAsDone(reps)
 
   return (
     <div className={rowClassName}>
@@ -180,8 +188,10 @@ export const SetRow: FC<SetRowProps> = ({ set, index, defaultWeight, defaultUnit
           variant={set.isCompleted ? 'secondary' : 'primary'}
           size="sm"
           className={set.isCompleted ? 'set-row__action--done' : undefined}
-          aria-label={set.isCompleted ? `Undo set ${String(rowNumber)}` : `Complete set ${String(rowNumber)}`}
-          disabled={isCompleting}
+          aria-label={set.isCompleted
+            ? `Undo set ${String(rowNumber)}`
+            : hasReps ? `Complete set ${String(rowNumber)}` : `Enter reps to complete set ${String(rowNumber)}`}
+          disabled={isCompleting || (!set.isCompleted && !hasReps)}
           onClick={() => { void (set.isCompleted ? handleUndo() : handleComplete()) }}
         >
           {set.isCompleted ? 'Undo' : 'Complete'}

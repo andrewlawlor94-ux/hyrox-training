@@ -47,6 +47,17 @@ export const TimerSettings: FC<TimerSettingsProps> = ({ settings }) => {
           This device doesn&apos;t support vibration, so this setting has no effect here.
         </p>
       )}
+      {/* Said plainly rather than left to be discovered mid-session. The beep is
+          queued in the audio graph when a rest starts (see `scheduleTone`), which
+          is what makes it survive a locked screen — but nothing a web app can do
+          survives iOS suspending the page when you switch apps. Claiming
+          otherwise would be the more useful-sounding answer and the wrong one. */}
+      <p className="settings-screen__note">
+        The rest beep is queued as soon as a rest starts, so it still sounds with the screen off or
+        the phone in your pocket. Switching to another app on an iPhone suspends the page and stops
+        it — when you come back the bar tells you how long ago the rest ended. Only a native app can
+        alarm through that, which this is not.
+      </p>
     </section>
   )
 }

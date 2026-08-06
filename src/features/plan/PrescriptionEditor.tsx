@@ -1,6 +1,6 @@
 import type { FC } from 'react'
 import { useEffect, useState } from 'react'
-import { NumberField, Sheet } from '@/components'
+import { DurationField, NumberField, Sheet } from '@/components'
 import { applyPrescriptionEdit } from '@/data/repositories'
 import type { EditScope, Exercise, InstancePrescription, Prescription } from '@/data/types'
 import { EditScopeSheet } from './EditScopeSheet'
@@ -124,11 +124,11 @@ export const PrescriptionEditor: FC<PrescriptionEditorProps> = ({ open, instance
         {!isStrength && (
           <>
             <NumberField id="pe-distance" label="Distance (m)" value={fields.distanceM} onChange={(v) => { update('distanceM', v) }} inputMode="numeric" />
-            <NumberField id="pe-duration" label="Duration (sec)" value={fields.durationSec} onChange={(v) => { update('durationSec', v) }} inputMode="numeric" />
+            <DurationField id="pe-duration" label="Duration" valueSec={fields.durationSec} onCommit={(v) => { update('durationSec', v) }} />
             <NumberField id="pe-pace" label="Target pace (sec/km)" value={fields.targetPaceSecPerKm} onChange={(v) => { update('targetPaceSecPerKm', v) }} inputMode="numeric" />
           </>
         )}
-        <NumberField id="pe-rest" label="Rest seconds" value={fields.restSec} onChange={(v) => { update('restSec', v) }} inputMode="numeric" />
+        <DurationField id="pe-rest" label="Rest" valueSec={fields.restSec} onCommit={(v) => { update('restSec', v) }} />
         <div className="prescription-editor__notes">
           <label htmlFor="pe-notes">Notes</label>
           <textarea id="pe-notes" value={fields.notes} onChange={(e) => { update('notes', e.target.value) }} />

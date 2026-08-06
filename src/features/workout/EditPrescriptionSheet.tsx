@@ -1,7 +1,7 @@
 import type { FC, ReactElement } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Button, NumberField, SegmentedControl, Sheet } from '@/components'
+import { Button, DurationField, NumberField, SegmentedControl, Sheet } from '@/components'
 import { applyPrescriptionEdit } from '@/data/repositories'
 import type { EditScope, Prescription } from '@/data/types'
 import { EDIT_SCOPE_OPTIONS, effectiveValues, loadEditSheetData } from './editPrescriptionData'
@@ -162,7 +162,7 @@ export const EditPrescriptionSheet: FC<EditPrescriptionSheetProps> = ({ open, in
             onChange={(v) => { updateField('targetLoad', v) }} inputMode="decimal"
           />
           <NumberField id="edit-rx-rir" label="Target RIR" value={fields.targetRir} onChange={(v) => { updateField('targetRir', v) }} inputMode="numeric" />
-          <NumberField id="edit-rx-rest" label="Rest seconds" value={fields.restSec} onChange={(v) => { updateField('restSec', v) }} inputMode="numeric" />
+          <DurationField id="edit-rx-rest" label="Rest" valueSec={fields.restSec} onCommit={(v) => { updateField('restSec', v) }} />
         </div>
         <SegmentedControl label="Apply to" options={EDIT_SCOPE_OPTIONS} value={scope} onChange={setScope} />
         {error && <p className="edit-prescription-sheet__error" role="alert">{error}</p>}

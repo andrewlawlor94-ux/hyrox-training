@@ -6,6 +6,7 @@ import { primeAudio } from '@/features/timer/feedback'
 import { useRestTimer } from '@/features/timer/useRestTimer'
 import { EditPrescriptionSheet } from './EditPrescriptionSheet'
 import { hasUnknownLoad } from './loadPresentation'
+import { LoggedStatus } from './LoggedStatus'
 import { WarmupRamp } from './WarmupRamp'
 import { RunBlock } from './RunBlock'
 import { SetRow } from './SetRow'
@@ -90,6 +91,9 @@ const StrengthCard: FC<StrengthCardProps> = ({ item, frozen }) => {
         onUseTarget={() => { handleUseTarget().catch(logAndIgnore) }}
         {...(frozen ? {} : { onOpenSettings: () => { setEditOpen(true) } })}
       />
+      {/* Whether this exercise is on the record yet, judged by its own
+          deciding box — reps for a strength set. See `LoggedStatus`. */}
+      <LoggedStatus item={item} />
       {/* Warm-up ramp to today's working load. Guidance only — see WarmupRamp. */}
       {!unknownLoad && <WarmupRamp exercise={exercise} workingLoad={recommendation.target} />}
 

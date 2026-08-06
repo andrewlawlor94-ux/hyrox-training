@@ -173,7 +173,8 @@ describe('Edit', () => {
     const dialog = screen.getByRole('dialog')
     const restInput = within(dialog).getByLabelText(/default rest/i)
     await userEvent.clear(restInput)
-    await userEvent.type(restInput, '200')
+    // A clock, not raw seconds: '320' is 3:20, i.e. 200s.
+    await userEvent.type(restInput, '320')
     await userEvent.click(within(dialog).getByRole('button', { name: /save changes/i }))
 
     await waitFor(async () => {

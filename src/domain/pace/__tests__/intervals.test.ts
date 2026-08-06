@@ -42,9 +42,35 @@ describe('summarizeSplits', () => {
   it('returns a zeroed summary with null paces for no splits', () => {
     expect(summarizeSplits([])).toEqual({
       workCount: 0, totalWorkDistanceM: 0, totalSessionDistanceM: 0,
-      totalWorkDurationSec: 0, meanWorkPaceSecPerKm: null,
+      totalSessionDurationSec: 0, totalWorkDurationSec: 0, meanWorkPaceSecPerKm: null,
       fastestWorkPaceSecPerKm: null, slowestWorkPaceSecPerKm: null,
     })
+  })
+
+  /**
+   * The total an interval session is actually saved with. Every split counts
+   * toward it — warm-up and cool-down included — which is exactly what makes it
+   * different from `totalWorkDurationSec`.
+   */
+  it('totals every split\'s duration, not just the work reps', () => {
+    const summary = summarizeSplits([
+      { kind: 'warmup', durationSec: 300 },
+      { kind: 'work', durationSec: 240, distanceM: 1000 },
+      { kind: 'recovery', durationSec: 90 },
+      { kind: 'work', durationSec: 250, distanceM: 1000 },
+      { kind: 'cooldown', durationSec: 300 },
+    ])
+    expect(summary.totalSessionDurationSec).toBe(300 + 240 + 90 + 250 + 300)
+    expect(summary.totalWorkDurationSec).toBe(240 + 250)
+    // Warm-up and cool-down carry no distance, so the session distance is the
+    // work distance here — but the DURATIONS differ, which is the point.
+    expect(summary.totalSessionDistanceM).toBe(2000)
+  })
+
+  it('counts a split with no duration as contributing nothing, never NaN', () => {
+    const summary = summarizeSplits([{ kind: 'work', distanceM: 1000 }, { kind: 'recovery' }])
+    expect(summary.totalSessionDurationSec).toBe(0)
+    expect(Number.isNaN(summary.totalSessionDurationSec)).toBe(false)
   })
 
   it('ignores splits missing distance when computing pace but still counts them', () => {
