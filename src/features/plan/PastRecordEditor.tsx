@@ -8,6 +8,7 @@ import type { RunLog, StationLog, StrengthSet } from '@/data/types'
 // Same debounced write queue the live-logging screen uses (cross-feature the
 // way WorkoutFooter already imports @/features/symptoms/RedFlagScreen).
 import { useAutosave } from '@/features/workout/useAutosave'
+import { PastIntervalRun } from './PastIntervalRun'
 
 interface PastRecordEditorProps {
   instanceId: string
@@ -46,6 +47,21 @@ export const PastRecordEditor: FC<PastRecordEditorProps> = ({ instanceId }) => {
   const sets = useLiveQuery(() => db.strengthSets.where('instanceId').equals(instanceId).sortBy('setIndex'), [instanceId])
   const runLogs = useLiveQuery(() => db.runLogs.where('instanceId').equals(instanceId).toArray(), [instanceId])
   const stationLogs = useLiveQuery(() => db.stationLogs.where('instanceId').equals(instanceId).toArray(), [instanceId])
+  // Interval runs are driven by the PRESCRIPTION rather than by a stored row, so
+  // a session whose data never saved can still have it entered — see
+  // `PastIntervalRun`. Pure reads, safe inside a live query.
+  const intervals = useLiveQuery(async () => {
+    const prescriptions = await db.instancePrescriptions.where('instanceId').equals(instanceId).sortBy('order')
+    const runs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
+    const out = []
+    for (const prescription of prescriptions.filter((p) => p.intervalSpec !== undefined)) {
+      const exercise = await db.exercises.get(prescription.exerciseId)
+      const log = runs.find((r) => r.instancePrescriptionId === prescription.id)
+      const splits = log ? await db.intervalSplits.where('runLogId').equals(log.id).sortBy('index') : []
+      out.push({ prescription, exerciseName: exercise?.name ?? 'Run', log, splits })
+    }
+    return out
+  }, [instanceId])
   const [error, setError] = useState<string | null>(null)
   const autosave = useAutosave()
 
@@ -124,10 +140,19 @@ export const PastRecordEditor: FC<PastRecordEditorProps> = ({ instanceId }) => {
     void autosave.flushKey(rowId)
   }
 
-  if (sets === undefined || runLogs === undefined || stationLogs === undefined) return <p>Loading…</p>
-  if (sets.length === 0 && runLogs.length === 0 && stationLogs.length === 0) {
+  if (sets === undefined || runLogs === undefined || stationLogs === undefined || intervals === undefined) {
+    return <p>Loading…</p>
+  }
+  // An interval run counts as something to show even with no stored row: its reps
+  // come from the prescription, so they can be entered now (`PastIntervalRun`).
+  // Refusing here was a dead end precisely when the record most needed fixing.
+  if (sets.length === 0 && runLogs.length === 0 && stationLogs.length === 0 && intervals.length === 0) {
     return <p>No logged sets, runs, or stations to correct on this record.</p>
   }
+  // Interval runs are rendered by `PastIntervalRun` instead, which owns their
+  // totals — showing an editable distance/duration pair as well would be two
+  // places to change the same derived fact.
+  const intervalPrescriptionIds = new Set(intervals.map((row) => row.prescription.id))
 
   return (
     <div className="past-record-editor">
@@ -149,7 +174,18 @@ export const PastRecordEditor: FC<PastRecordEditorProps> = ({ instanceId }) => {
         </div>
       ))}
 
-      {runLogs.map((log) => (
+      {intervals.map((row) => (
+        <PastIntervalRun
+          key={row.prescription.id}
+          prescription={row.prescription}
+          exerciseName={row.exerciseName}
+          log={row.log}
+          splits={row.splits}
+          onError={reportFailure}
+        />
+      ))}
+
+      {runLogs.filter((log) => log.instancePrescriptionId === undefined || !intervalPrescriptionIds.has(log.instancePrescriptionId)).map((log) => (
         <div key={log.id} className="past-record-editor__row">
           <span className="past-record-editor__set-index">{log.runType} run</span>
           <NumberField

@@ -3,12 +3,13 @@ import { useState } from 'react'
 import type { IntervalSplit, RunLog, RunType, Surface } from '@/data/types'
 import { Card, Chip, DurationField, NumberField, SegmentedControl } from '@/components'
 import { deleteRunLog, saveRunLog } from '@/data/repositories'
-import { isPositiveFinite, paceSecPerKm } from '@/domain/pace/pace'
-import { splitPaceSecPerKm, summarizeSplits } from '@/domain/pace/intervals'
+import { paceSecPerKm } from '@/domain/pace/pace'
+import { splitPaceSecPerKm } from '@/domain/pace/intervals'
 import { formatDistanceM, formatDuration, formatPace } from '@/domain/units/format'
 import { DEFAULT_RUN_TYPE_BY_EXERCISE_ID, RUN_TYPE_OPTIONS, SURFACE_OPTIONS } from './constants'
 import { IntervalSplitsEditor } from './IntervalSplitsEditor'
 import { LoggedStatus } from './LoggedStatus'
+import { intervalTotals, isLoggableRun } from './runTotals'
 import type { DraftSplit } from './IntervalSplitsEditor'
 import { useAutosave } from './useAutosave'
 import type { RunExerciseVM } from './useWorkout'
@@ -28,41 +29,6 @@ function prescribedRunType(item: RunExerciseVM): RunType {
 
 function runTypeLabel(type: RunType): string {
   return RUN_TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type
-}
-
-/**
- * A `RunLog` is only ever a genuinely asserted run — `distanceKm`/`durationSec`
- * are required numbers, unlike `StationLog`'s optional measurement fields —
- * so "loggable" means both are actually present *and* positive-finite, not
- * merely non-null. `merged.distanceKm === null || merged.durationSec === null`
- * alone (the previous check) is exactly the assertion-blind-to-validity shape
- * this project keeps re-introducing (I1/I2/I3): it happily accepted 0 or a
- * negative value as "present enough to save".
- */
-function isLoggableRun(distanceKm: number | null, durationSec: number | null): boolean {
-  return distanceKm !== null && durationSec !== null && isPositiveFinite(distanceKm) && isPositiveFinite(durationSec)
-}
-
-/**
- * An interval session's own totals, added up from its splits.
- *
- * For an interval run the splits ARE the run: four reps plus a warm-up and a
- * cool-down is the whole session, and its distance and duration are the sums of
- * those parts. Asking for them a second time in separate top-level boxes gave
- * the athlete two places to type the same fact and no way to tell which one
- * counted — and because the top-level duration was the one `isLoggableRun`
- * checked, a fully-filled quality session with that box left blank saved
- * NOTHING. That was the athlete's "quality run isn't actually logging data".
- *
- * Returns `null` for a total that is not yet a real number, so a half-entered
- * session is still refused rather than saved as a zero.
- */
-function intervalTotals(drafts: DraftSplit[]): { distanceKm: number | null; durationSec: number | null } {
-  const summary = summarizeSplits(drafts)
-  return {
-    distanceKm: summary.totalSessionDistanceM > 0 ? summary.totalSessionDistanceM / M_PER_KM : null,
-    durationSec: summary.totalSessionDurationSec > 0 ? summary.totalSessionDurationSec : null,
-  }
 }
 
 function toIntervalSplits(runLogId: string, drafts: DraftSplit[]): IntervalSplit[] {

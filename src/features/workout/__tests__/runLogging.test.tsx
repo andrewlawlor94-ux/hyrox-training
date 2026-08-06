@@ -443,6 +443,53 @@ describe('run logging', () => {
     })
   })
 
+  /**
+   * The athlete's own session: "i did the workout this morning and logged two
+   * sets of 1km and the other two blank."
+   *
+   * A blank rep is not blank — a 4 × 1000 m prescription prefills 1000 m into all
+   * four rows and leaves the times empty, so counting every row would have stored
+   * 4 km for two reps, and a pace derived from twice the distance actually run.
+   */
+  it('records only the reps that were actually run, not the prefilled rows beside them', async () => {
+    const instanceId = await createRunWorkout([{
+      exerciseId: 'ex_quality_run', distanceM: 1000,
+      intervalSpec: { reps: 4, workDistanceM: 1000, recoverySec: 90 },
+    }])
+    await renderWorkout(instanceId)
+
+    // Every row starts with the prescribed distance already in it...
+    for (const rep of [1, 2, 3, 4]) {
+      expect(
+        (await screen.findByLabelText<HTMLInputElement>(new RegExp(`^work ${String(rep)} distance`, 'i'))).value,
+        `rep ${String(rep)} distance`,
+      ).toBe('1000')
+    }
+    // ...and nothing is logged until a TIME turns one into a rep that happened.
+    expect(await db.runLogs.where('instanceId').equals(instanceId).count()).toBe(0)
+
+    for (const [rep, digits] of [[1, '410'], [2, '415']] as const) {
+      const time = screen.getByLabelText(new RegExp(`^work ${String(rep)} time`, 'i'))
+      fireEvent.change(time, { target: { value: digits } })
+      fireEvent.blur(time)
+    }
+
+    await waitFor(async () => {
+      const logs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
+      expect(logs).toHaveLength(1)
+      // Two reps, so 2 km — never the 4 km sitting prefilled on screen.
+      expect(logs[0]?.distanceKm).toBe(2)
+      // 4:10 + one recovery between the two + 4:15.
+      expect(logs[0]?.durationSec).toBe(250 + 90 + 255)
+
+      const splits = await db.intervalSplits.where('runLogId').equals(logs[0]!.id).sortBy('index')
+      // The two reps that happened, and the single gap between them. The blank
+      // reps are absent entirely rather than stored as a 1000 m claim.
+      expect(splits.map((s) => s.kind)).toEqual(['work', 'recovery', 'work'])
+      expect(splits.filter((s) => s.kind === 'work').map((s) => s.durationSec)).toEqual([250, 255])
+    })
+  })
+
   it('saving persists IntervalSplit rows with correct index and kind', async () => {
     const instanceId = await createRunWorkout([{
       exerciseId: 'ex_quality_run', distanceM: 1000,

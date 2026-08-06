@@ -29,33 +29,61 @@ function resize<T>(rows: T[], count: number, makeDefault: () => T): T[] {
 }
 
 /**
- * Assembles the persisted split list in session order.
+ * A rep is only recorded once BOTH its distance and its time are there.
  *
- * Recoveries sit BETWEEN work reps — four reps have three recoveries, not four.
- * The athlete asked for "a timer between the four works", and that is also the
- * honest shape: after the last rep you cool down, and the cool-down split
- * already records it. A trailing recovery was an empty row that existed only
- * because the loop happened to add one.
+ * This is the interval version of "every exercise has its own deciding box", and
+ * it matters because a blank rep is not actually blank — the prescription
+ * prefills one side of every row. A 4 × 1000 m session starts with 1000 m in all
+ * four rows and the times empty; a 6 × 2:00 session starts with 2:00 in all six
+ * and the distances empty. So the athlete supplies whichever side the programme
+ * did not, and a rep with only the prefilled side is a rep that did not happen.
+ *
+ * Counting them anyway was a real defect: the athlete ran two reps of a 4 × 1000 m
+ * session and the other two rows still carried their prefilled 1000 m, so the
+ * session would have been stored as 4 km — twice what they ran, at a pace derived
+ * from it. Requiring both fields also means every stored rep can be paced, which
+ * is the only reason a work split is worth keeping.
+ */
+function isRecordedRep(row: RowValue | undefined): boolean {
+  return row?.distanceM !== null && row?.distanceM !== undefined
+    && row.durationSec !== null && row.durationSec !== undefined
+}
+
+/**
+ * Assembles the persisted split list in session order, from the reps actually
+ * recorded (`isRecordedRep`) — a rep left blank is left out entirely rather than
+ * stored as a claim about work that was never done.
+ *
+ * Recoveries sit BETWEEN recorded reps — four reps have three recoveries, not
+ * four, and two recorded reps have one. The athlete asked for "a timer between
+ * the four works", and that is also the honest shape: after the last rep you cool
+ * down, and the cool-down split already records it.
  */
 function buildDraftSplits(
   warmupSec: number | null, reps: number, workRows: RowValue[], recoveryRows: RowValue[], cooldownSec: number | null,
 ): DraftSplit[] {
+  const recorded: number[] = []
+  for (let i = 0; i < reps; i += 1) {
+    if (isRecordedRep(workRows[i])) recorded.push(i)
+  }
+
   const out: DraftSplit[] = []
   let index = 0
   if (warmupSec !== null) { out.push({ index, kind: 'warmup', durationSec: warmupSec }); index += 1 }
-  for (let i = 0; i < reps; i += 1) {
-    const work = workRows[i]
+  recorded.forEach((rowIndex, position) => {
+    const work = workRows[rowIndex]
     out.push({
       index, kind: 'work',
       ...(work?.distanceM !== null && work?.distanceM !== undefined ? { distanceM: work.distanceM } : {}),
       ...(work?.durationSec !== null && work?.durationSec !== undefined ? { durationSec: work.durationSec } : {}),
     })
     index += 1
-    if (i === reps - 1) continue
-    const recovery = recoveryRows[i]
+    // The gap AFTER this rep, and only when another recorded rep follows it.
+    if (position === recorded.length - 1) return
+    const recovery = recoveryRows[rowIndex]
     out.push({ index, kind: 'recovery', ...(recovery?.durationSec !== null && recovery?.durationSec !== undefined ? { durationSec: recovery.durationSec } : {}) })
     index += 1
-  }
+  })
   if (cooldownSec !== null) out.push({ index, kind: 'cooldown', durationSec: cooldownSec })
   return out
 }
@@ -63,6 +91,29 @@ function buildDraftSplits(
 function repsFromSpecOrSplits(intervalSpec: IntervalSpec | undefined, initialSplits: IntervalSplit[]): number {
   if (intervalSpec) return intervalSpec.reps
   return initialSplits.filter((s) => s.kind === 'work').length
+}
+
+/**
+ * Seeds the rows from what was actually SAVED, falling back to the
+ * prescription's target for rows that were never recorded.
+ *
+ * Without this the editor showed the prescription every time it opened, so
+ * reopening a session — mid-workout, or through "edit this past record" — showed
+ * the target reps rather than the athlete's own times. They asked for the
+ * opposite in as many words: "I should be able to see what i logged and change
+ * it."
+ *
+ * Saved reps fill from the first row down. A session that recorded reps 1 and 3
+ * therefore reopens as rows 1 and 2, because a split records its position in the
+ * SEQUENCE, not which rep number it was — the values and the count are preserved,
+ * which is what the athlete is reading and correcting.
+ */
+function seedRows(kind: SplitKind, initialSplits: IntervalSplit[], reps: number, fallback: RowValue): RowValue[] {
+  const saved = initialSplits
+    .filter((split) => split.kind === kind)
+    .sort((a, b) => a.index - b.index)
+    .map((split) => ({ distanceM: split.distanceM ?? null, durationSec: split.durationSec ?? null }))
+  return Array.from({ length: reps }, (_unused, i) => saved[i] ?? { ...fallback })
 }
 
 /** The prescription as one sentence, e.g. "4 × 1000 m with 1:30 recovery".
@@ -128,14 +179,16 @@ function logAndIgnore(err: unknown): void {
 export const IntervalSplitsEditor: FC<IntervalSplitsEditorProps> = ({ idPrefix, intervalSpec, initialSplits, onChange }) => {
   const hasPrefill = intervalSpec !== undefined || initialSplits.length > 0
   const [open, setOpen] = useState(hasPrefill)
-  const [warmupSec, setWarmupSec] = useState<number | null>(intervalSpec?.warmupSec ?? null)
+  const savedPhase = (kind: SplitKind): number | null =>
+    initialSplits.find((split) => split.kind === kind)?.durationSec ?? null
+  const [warmupSec, setWarmupSec] = useState<number | null>(savedPhase('warmup') ?? intervalSpec?.warmupSec ?? null)
   const [reps, setReps] = useState<number>(repsFromSpecOrSplits(intervalSpec, initialSplits))
-  const [cooldownSec, setCooldownSec] = useState<number | null>(intervalSpec?.cooldownSec ?? null)
+  const [cooldownSec, setCooldownSec] = useState<number | null>(savedPhase('cooldown') ?? intervalSpec?.cooldownSec ?? null)
   const [workRows, setWorkRows] = useState<RowValue[]>(
-    () => Array.from({ length: reps }, () => ({ distanceM: intervalSpec?.workDistanceM ?? null, durationSec: intervalSpec?.workSec ?? null })),
+    () => seedRows('work', initialSplits, reps, { distanceM: intervalSpec?.workDistanceM ?? null, durationSec: intervalSpec?.workSec ?? null }),
   )
   const [recoveryRows, setRecoveryRows] = useState<RowValue[]>(
-    () => Array.from({ length: reps }, () => ({ distanceM: null, durationSec: intervalSpec?.recoverySec ?? null })),
+    () => seedRows('recovery', initialSplits, reps, { distanceM: null, durationSec: intervalSpec?.recoverySec ?? null }),
   )
   const { start } = useRestTimer()
 

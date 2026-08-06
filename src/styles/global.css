@@ -805,6 +805,11 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 .move-workout-control__input { min-height: var(--tap-min); padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg); color: var(--text); }
 
 .past-record-editor__row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); min-width: 0; }
+
+/* Correcting a past interval run: the reps, not just the totals. */
+.past-interval-run { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.past-interval-run__name { margin: 0; font-size: var(--font-size-md); }
+.past-interval-run__totals { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
 .past-record-editor__set-index { font-weight: 600; min-width: 4ch; }
 
 .plan-manager__section { display: flex; flex-direction: column; gap: var(--space-2); }
