@@ -806,6 +806,12 @@ button { min-height: var(--tap-min); min-width: var(--tap-min); cursor: pointer;
 
 .past-record-editor__row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2); min-width: 0; }
 
+/* One block per prescribed exercise, so a record can be corrected — or entered
+   for the first time — exercise by exercise rather than row by row. */
+.past-record-editor__exercise { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.past-record-editor__exercise-name { margin: 0; font-size: var(--font-size-md); }
+.past-record-editor__hint { margin: 0; font-size: var(--font-size-sm); color: var(--text-muted); }
+
 /* Correcting a past interval run: the reps, not just the totals. */
 .past-interval-run { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .past-interval-run__name { margin: 0; font-size: var(--font-size-md); }

@@ -162,14 +162,17 @@ describe('run logging', () => {
     const instanceId = await createRunWorkout([{ exerciseId: 'ex_easy_run' }])
     await renderWorkout(instanceId)
 
-    const durationInput = screen.getByLabelText<HTMLInputElement>(/duration/i)
+    // Re-queried each step rather than captured once: this screen's live query
+    // can resolve again between keystrokes, and a node held across that is a
+    // detached element whose `.value` no longer reflects what is rendered.
     for (const [typed, shown] of [['4', '0:04'], ['45', '0:45'], ['453', '4:53'], ['4530', '45:30']] as const) {
-      fireEvent.change(durationInput, { target: { value: typed } })
-      expect(durationInput.value, typed).toBe(shown)
+      const field = screen.getByLabelText<HTMLInputElement>(/duration/i)
+      fireEvent.change(field, { target: { value: typed } })
+      expect(screen.getByLabelText<HTMLInputElement>(/duration/i).value, typed).toBe(shown)
     }
 
     fireEvent.change(screen.getByLabelText(/distance/i), { target: { value: '5' } })
-    fireEvent.blur(durationInput)
+    fireEvent.blur(screen.getByLabelText(/duration/i))
     await waitFor(async () => {
       const logs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
       expect(logs[0]?.durationSec).toBe(45 * 60 + 30)

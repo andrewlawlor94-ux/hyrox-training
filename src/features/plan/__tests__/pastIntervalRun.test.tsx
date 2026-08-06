@@ -9,11 +9,9 @@ const INSTANCE_ID = 'wi_quality'
 const PRESCRIPTION_ID = 'ip_quality'
 const RUN_LOG_ID = `rl_${PRESCRIPTION_ID}`
 
-/**
- * A COMPLETED 4 × 1000 m quality session. Whether it has a stored run is the
- * variable — the athlete's own session had none.
- */
-async function seedCompletedIntervalSession(opts: { withLog: boolean }): Promise<void> {
+/** A completed, frozen session with no prescriptions yet — each test adds the
+ * ones it needs. */
+async function seedCompletedSession(): Promise<void> {
   await db.workoutTemplates.add({
     id: 'tmpl_quality', planId: 'plan_test', planWeekId: 'week_1', sessionSlot: 3, sequenceInWeek: 0,
     name: 'Quality run (intervals)', kind: 'run', priority: 'essential', recoveryTags: ['hardRun'],
@@ -25,6 +23,12 @@ async function seedCompletedIntervalSession(opts: { withLog: boolean }): Promise
     recoveryTags: ['hardRun'], status: 'completed', isManualOverride: false, frozen: true,
     completedAt: NOW, completedForDate: '2026-08-24',
   })
+}
+
+/** That session, prescribing a 4 × 1000 m quality run. Whether it has a stored
+ * run is the variable — the athlete's own session had none. */
+async function seedCompletedIntervalSession(opts: { withLog: boolean }): Promise<void> {
+  await seedCompletedSession()
   await db.instancePrescriptions.add({
     id: PRESCRIPTION_ID, instanceId: INSTANCE_ID, templateId: 'tmpl_quality', exerciseId: 'ex_quality_run',
     order: 0, restSec: 0, distanceM: 1000,
@@ -117,18 +121,99 @@ describe('correcting a past interval run', () => {
     render(<PastRecordEditor instanceId={INSTANCE_ID} />)
     await screen.findByLabelText(/^work 1 time/i)
 
-    const time = screen.getByLabelText(/^work 1 time/i)
+    const time = screen.getByLabelText<HTMLInputElement>(/^work 1 time/i)
     fireEvent.change(time, { target: { value: '405' } }) // 4:05
     fireEvent.blur(time)
 
+    // The write is debounced and goes through IndexedDB, which under full-suite
+    // contention can take longer than `waitFor`'s 1s default. The assertions
+    // themselves are unchanged and exact.
     await waitFor(async () => {
       const log = await db.runLogs.get(RUN_LOG_ID)
       expect(log?.durationSec).toBe(245 + 90 + 255)
       // The stored pace follows the corrected reps rather than disagreeing with them.
       expect(log?.paceSecPerKm).toBe((245 + 90 + 255) / 2)
-    })
+    }, { timeout: 5000 })
     // The original logging time is kept — this is a correction, not a new run.
     expect((await db.runLogs.get(RUN_LOG_ID))?.loggedAt).toBe(NOW)
+  })
+
+  /**
+   * The athlete generalised the requirement: "i should be able to edit that
+   * record and input data even if it wasnt captured the first time." Not just
+   * interval runs — anything the session prescribed.
+   */
+  it('lets a plain run with no stored row be entered afterwards', async () => {
+    await seedCompletedSession()
+    await db.instancePrescriptions.add({
+      id: 'ip_easy', instanceId: INSTANCE_ID, templateId: 'tmpl_quality', exerciseId: 'ex_easy_run',
+      order: 1, restSec: 0, durationSec: 2400,
+    })
+    render(<PastRecordEditor instanceId={INSTANCE_ID} />)
+
+    expect(await screen.findByText(/Nothing was recorded for this run\. Enter the distance and the time/)).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText<HTMLInputElement>('Distance'), { target: { value: '8' } })
+    const duration = screen.getByLabelText<HTMLInputElement>('Duration')
+    fireEvent.change(duration, { target: { value: '4230' } }) // 42:30
+    fireEvent.blur(duration)
+
+    await waitFor(async () => {
+      const logs = await db.runLogs.where('instanceId').equals(INSTANCE_ID).toArray()
+      const easy = logs.find((l) => l.instancePrescriptionId === 'ip_easy')
+      expect(easy?.distanceKm).toBe(8)
+      expect(easy?.durationSec).toBe(42 * 60 + 30)
+    }, { timeout: 5000 })
+  })
+
+  it('lets a station with no stored row be entered afterwards, with only the fields it has', async () => {
+    await seedCompletedSession()
+    await db.instancePrescriptions.add({
+      id: 'ip_sled', instanceId: INSTANCE_ID, templateId: 'tmpl_quality', exerciseId: 'ex_sled_push',
+      order: 1, restSec: 90, distanceM: 50,
+    })
+    render(<PastRecordEditor instanceId={INSTANCE_ID} />)
+
+    expect(await screen.findByText(/Nothing was recorded for this station/)).toBeInTheDocument()
+    // A 50 m sled push has no rep count, here as on the live screen.
+    expect(screen.queryByLabelText('Reps')).toBeNull()
+
+    const time = screen.getByLabelText<HTMLInputElement>('Time')
+    fireEvent.change(time, { target: { value: '410' } }) // 4:10
+    fireEvent.blur(time)
+
+    await waitFor(async () => {
+      const logs = await db.stationLogs.where('instanceId').equals(INSTANCE_ID).toArray()
+      expect(logs).toHaveLength(1)
+      expect(logs[0]?.timeSec).toBe(250)
+      expect(logs[0]?.station).toBe('sledPush')
+    }, { timeout: 5000 })
+  })
+
+  it('still shows a log that belongs to no prescription, rather than dropping it', async () => {
+    // Older rows, or a backup predating the prescription link. Grouping by
+    // exercise must not make them vanish from the one screen that can fix them.
+    await seedCompletedSession()
+    await db.runLogs.add({
+      id: 'run_orphan', instanceId: INSTANCE_ID, distanceKm: 5, durationSec: 1800,
+      surface: 'road', runType: 'easy', notes: '', loggedAt: NOW,
+    })
+    render(<PastRecordEditor instanceId={INSTANCE_ID} />)
+
+    const distance = await screen.findByLabelText<HTMLInputElement>('Distance', { selector: '#past-run-distance-run_orphan' })
+    expect(distance.value).toBe('5')
+  })
+
+  it('does not rewrite a record just because the editor was opened', async () => {
+    await seedCompletedIntervalSession({ withLog: true })
+    const before = await db.runLogs.get(RUN_LOG_ID)
+    render(<PastRecordEditor instanceId={INSTANCE_ID} />)
+    await screen.findByLabelText(/^work 1 time/i)
+
+    // The splits editor reports its rows on mount; that echo must not count as
+    // an edit to frozen history. Real delay, since this asserts an absence.
+    await new Promise((resolve) => { setTimeout(resolve, 500) })
+    expect(await db.runLogs.get(RUN_LOG_ID)).toEqual(before)
   })
 
   it('writes nothing at all just for opening the editor', async () => {

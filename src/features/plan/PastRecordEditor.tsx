@@ -4,11 +4,15 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { DurationField, NumberField } from '@/components'
 import { db } from '@/data/db'
 import { saveRunLog, saveStationLog, upsertSet } from '@/data/repositories'
-import type { RunLog, StationLog, StrengthSet } from '@/data/types'
+import type {
+  Exercise, InstancePrescription, IntervalSplit, RunLog, StationLog, StrengthSet,
+} from '@/data/types'
 // Same debounced write queue the live-logging screen uses (cross-feature the
 // way WorkoutFooter already imports @/features/symptoms/RedFlagScreen).
 import { useAutosave } from '@/features/workout/useAutosave'
 import { PastIntervalRun } from './PastIntervalRun'
+import { PastPlainRun } from './PastPlainRun'
+import { PastStation } from './PastStation'
 
 interface PastRecordEditorProps {
   instanceId: string
@@ -16,6 +20,27 @@ interface PastRecordEditorProps {
 
 /** Only the one deliberate "correct a past record" path ever passes this. */
 const ALLOW_HISTORY_EDIT = { allowHistoryEdit: true } as const
+
+type EntryKind = 'strength' | 'intervalRun' | 'plainRun' | 'station'
+
+interface RecordEntry {
+  prescription: InstancePrescription
+  exercise: Exercise
+  kind: EntryKind
+  sets: StrengthSet[]
+  runLog: RunLog | undefined
+  splits: IntervalSplit[]
+  stationLog: StationLog | undefined
+}
+
+/** Same classification the live logging screen uses (`useWorkout`): strength
+ * sets, then runs by category, then everything else as a station. Interval runs
+ * are split out because their measurements are per-rep. */
+function entryKind(exercise: Exercise, prescription: InstancePrescription): EntryKind {
+  if (exercise.measurementType === 'strengthSets') return 'strength'
+  if (exercise.category !== 'run') return 'station'
+  return prescription.intervalSpec !== undefined ? 'intervalRun' : 'plainRun'
+}
 
 /**
  * §14's explicit "edit this past record" escape hatch: edits a COMPLETED
@@ -26,9 +51,13 @@ const ALLOW_HISTORY_EDIT = { allowHistoryEdit: true } as const
  * warning in `WorkoutEditor` (this component assumes that already happened;
  * it does not re-warn per field).
  *
- * Covers all three log kinds. Strength only was a real gap, not a scoping
- * choice: a mistyped run distance or sled load on a completed session was
- * uncorrectable, while the equivalent mistyped weight was one tap away.
+ * Driven by what the session PRESCRIBED, not by what it happened to store. The
+ * athlete was explicit about why: "i should be able to edit that record and input
+ * data even if it wasnt captured the first time." Listing stored rows meant a
+ * session that recorded nothing offered nothing to fix — the least useful moment
+ * to refuse, since a session whose data went missing is exactly the one needing
+ * re-entry. Every prescribed exercise now shows its fields whether or not a row
+ * exists, and the first real value creates one.
  *
  * Writes are DEBOUNCED (and flushed on blur), never one per keystroke: this is
  * the only path in the app licensed to overwrite frozen history, and an
@@ -36,32 +65,52 @@ const ALLOW_HISTORY_EDIT = { allowHistoryEdit: true } as const
  * completed record -- the first two of them (`1`, then `10`) plainly wrong
  * values that a live query elsewhere could read and a crash mid-sequence could
  * leave behind. Keying the queue by row id keeps each row's edits independent.
- *
- * Run logs are the one place a field is NOT clearable: `RunLog` requires
- * `distanceKm` and `durationSec` as numbers, so there is no valid partial row
- * to write. Clearing one leaves the stored value in place rather than writing a
- * zero (which this project has already been burned by treating as data) or
- * deleting the run outright, which is not what "correct a typo" means.
  */
 export const PastRecordEditor: FC<PastRecordEditorProps> = ({ instanceId }) => {
-  const sets = useLiveQuery(() => db.strengthSets.where('instanceId').equals(instanceId).sortBy('setIndex'), [instanceId])
-  const runLogs = useLiveQuery(() => db.runLogs.where('instanceId').equals(instanceId).toArray(), [instanceId])
-  const stationLogs = useLiveQuery(() => db.stationLogs.where('instanceId').equals(instanceId).toArray(), [instanceId])
-  // Interval runs are driven by the PRESCRIPTION rather than by a stored row, so
-  // a session whose data never saved can still have it entered — see
-  // `PastIntervalRun`. Pure reads, safe inside a live query.
-  const intervals = useLiveQuery(async () => {
+  const entries = useLiveQuery(async (): Promise<RecordEntry[]> => {
     const prescriptions = await db.instancePrescriptions.where('instanceId').equals(instanceId).sortBy('order')
-    const runs = await db.runLogs.where('instanceId').equals(instanceId).toArray()
-    const out = []
-    for (const prescription of prescriptions.filter((p) => p.intervalSpec !== undefined)) {
+    const [runs, stations, allSets] = await Promise.all([
+      db.runLogs.where('instanceId').equals(instanceId).toArray(),
+      db.stationLogs.where('instanceId').equals(instanceId).toArray(),
+      db.strengthSets.where('instanceId').equals(instanceId).sortBy('setIndex'),
+    ])
+    const out: RecordEntry[] = []
+    for (const prescription of prescriptions) {
       const exercise = await db.exercises.get(prescription.exerciseId)
-      const log = runs.find((r) => r.instancePrescriptionId === prescription.id)
-      const splits = log ? await db.intervalSplits.where('runLogId').equals(log.id).sortBy('index') : []
-      out.push({ prescription, exerciseName: exercise?.name ?? 'Run', log, splits })
+      if (!exercise) continue
+      const runLog = runs.find((r) => r.instancePrescriptionId === prescription.id)
+      out.push({
+        prescription,
+        exercise,
+        kind: entryKind(exercise, prescription),
+        sets: allSets.filter((s) => s.instancePrescriptionId === prescription.id),
+        runLog,
+        splits: runLog ? await db.intervalSplits.where('runLogId').equals(runLog.id).sortBy('index') : [],
+        stationLog: stations.find((s) => s.instancePrescriptionId === prescription.id),
+      })
     }
     return out
   }, [instanceId])
+
+  /**
+   * Logs belonging to no prescription — older rows, or anything imported from a
+   * backup that predates the link. They cannot be grouped under an exercise, so
+   * they keep the flat row-per-log treatment rather than disappearing from the
+   * editor entirely.
+   */
+  const orphans = useLiveQuery(async () => {
+    const prescriptionIds = new Set((await db.instancePrescriptions.where('instanceId').equals(instanceId).toArray()).map((p) => p.id))
+    const belongs = (id: string | undefined): boolean => id !== undefined && prescriptionIds.has(id)
+    const [runs, stations] = await Promise.all([
+      db.runLogs.where('instanceId').equals(instanceId).toArray(),
+      db.stationLogs.where('instanceId').equals(instanceId).toArray(),
+    ])
+    return {
+      runs: runs.filter((r) => !belongs(r.instancePrescriptionId)),
+      stations: stations.filter((s) => !belongs(s.instancePrescriptionId)),
+    }
+  }, [instanceId])
+
   const [error, setError] = useState<string | null>(null)
   const autosave = useAutosave()
 
@@ -95,8 +144,8 @@ export const PastRecordEditor: FC<PastRecordEditorProps> = ({ instanceId }) => {
   }
 
   function handleRunChange(log: RunLog, field: 'distanceKm' | 'durationSec', value: number | null): void {
-    // A required field cannot be blanked (see the doc comment) — ignore rather
-    // than write a zero or delete the athlete's run.
+    // A required field cannot be blanked — ignore rather than write a zero or
+    // delete the athlete's run.
     if (value === null) return
     setError(null)
     const next: RunLog = { ...(pendingRuns.current.get(log.id) ?? log), [field]: value }
@@ -107,8 +156,6 @@ export const PastRecordEditor: FC<PastRecordEditorProps> = ({ instanceId }) => {
 
     autosave.schedule(log.id, async () => {
       try {
-        // Splits are untouched by a distance/duration correction, so pass none
-        // rather than rewriting rows this editor never showed.
         await saveRunLog(next, [], ALLOW_HISTORY_EDIT)
         pendingRuns.current.delete(log.id)
       } catch (err) {
@@ -140,60 +187,85 @@ export const PastRecordEditor: FC<PastRecordEditorProps> = ({ instanceId }) => {
     void autosave.flushKey(rowId)
   }
 
-  if (sets === undefined || runLogs === undefined || stationLogs === undefined || intervals === undefined) {
-    return <p>Loading…</p>
+  if (entries === undefined || orphans === undefined) return <p>Loading…</p>
+  if (entries.length === 0 && orphans.runs.length === 0 && orphans.stations.length === 0) {
+    return <p>This session prescribed nothing, so there is no record to correct.</p>
   }
-  // An interval run counts as something to show even with no stored row: its reps
-  // come from the prescription, so they can be entered now (`PastIntervalRun`).
-  // Refusing here was a dead end precisely when the record most needed fixing.
-  if (sets.length === 0 && runLogs.length === 0 && stationLogs.length === 0 && intervals.length === 0) {
-    return <p>No logged sets, runs, or stations to correct on this record.</p>
-  }
-  // Interval runs are rendered by `PastIntervalRun` instead, which owns their
-  // totals — showing an editable distance/duration pair as well would be two
-  // places to change the same derived fact.
-  const intervalPrescriptionIds = new Set(intervals.map((row) => row.prescription.id))
 
   return (
     <div className="past-record-editor">
-      {sets.map((set, index) => (
-        <div key={set.id} className="past-record-editor__row">
-          <span className="past-record-editor__set-index">Set {index + 1}</span>
-          <NumberField
-            id={`past-weight-${set.id}`} label="Weight" value={set.weight ?? null}
-            onChange={(v) => { handleSetChange(set, 'weight', v) }} onBlur={() => { handleBlur(set.id) }} inputMode="decimal"
-          />
-          <NumberField
-            id={`past-reps-${set.id}`} label="Reps" value={set.reps ?? null}
-            onChange={(v) => { handleSetChange(set, 'reps', v) }} onBlur={() => { handleBlur(set.id) }} inputMode="numeric"
-          />
-          <NumberField
-            id={`past-rir-${set.id}`} label="RIR" value={set.rir ?? null}
-            onChange={(v) => { handleSetChange(set, 'rir', v) }} onBlur={() => { handleBlur(set.id) }} inputMode="numeric"
-          />
-        </div>
-      ))}
+      {entries.map((entry) => {
+        if (entry.kind === 'intervalRun') {
+          return (
+            <PastIntervalRun
+              key={entry.prescription.id}
+              prescription={entry.prescription}
+              exerciseName={entry.exercise.name}
+              log={entry.runLog}
+              splits={entry.splits}
+              onError={reportFailure}
+            />
+          )
+        }
+        if (entry.kind === 'plainRun') {
+          return (
+            <PastPlainRun
+              key={entry.prescription.id}
+              prescription={entry.prescription}
+              exerciseName={entry.exercise.name}
+              log={entry.runLog}
+              onError={reportFailure}
+            />
+          )
+        }
+        if (entry.kind === 'station') {
+          return (
+            <PastStation
+              key={entry.prescription.id}
+              prescription={entry.prescription}
+              exercise={entry.exercise}
+              log={entry.stationLog}
+              onError={reportFailure}
+            />
+          )
+        }
+        return (
+          <section key={entry.prescription.id} className="past-record-editor__exercise">
+            <h4 className="past-record-editor__exercise-name">{entry.exercise.name}</h4>
+            {entry.sets.length === 0 && (
+              // Set rows are materialised when the session is opened, so this is
+              // rare rather than impossible — say so instead of showing an
+              // exercise with no fields at all and no explanation.
+              <p className="past-record-editor__hint">No sets were recorded for this exercise.</p>
+            )}
+            {entry.sets.map((set, index) => (
+              <div key={set.id} className="past-record-editor__row">
+                <span className="past-record-editor__set-index">Set {index + 1}</span>
+                <NumberField
+                  id={`past-weight-${set.id}`} label="Weight" value={set.weight ?? null}
+                  onChange={(v) => { handleSetChange(set, 'weight', v) }} onBlur={() => { handleBlur(set.id) }} inputMode="decimal"
+                />
+                <NumberField
+                  id={`past-reps-${set.id}`} label="Reps" value={set.reps ?? null}
+                  onChange={(v) => { handleSetChange(set, 'reps', v) }} onBlur={() => { handleBlur(set.id) }} inputMode="numeric"
+                />
+                <NumberField
+                  id={`past-rir-${set.id}`} label="RIR" value={set.rir ?? null}
+                  onChange={(v) => { handleSetChange(set, 'rir', v) }} onBlur={() => { handleBlur(set.id) }} inputMode="numeric"
+                />
+              </div>
+            ))}
+          </section>
+        )
+      })}
 
-      {intervals.map((row) => (
-        <PastIntervalRun
-          key={row.prescription.id}
-          prescription={row.prescription}
-          exerciseName={row.exerciseName}
-          log={row.log}
-          splits={row.splits}
-          onError={reportFailure}
-        />
-      ))}
-
-      {runLogs.filter((log) => log.instancePrescriptionId === undefined || !intervalPrescriptionIds.has(log.instancePrescriptionId)).map((log) => (
+      {orphans.runs.map((log) => (
         <div key={log.id} className="past-record-editor__row">
           <span className="past-record-editor__set-index">{log.runType} run</span>
           <NumberField
             id={`past-run-distance-${log.id}`} label="Distance" value={log.distanceKm} unit="km"
             onChange={(v) => { handleRunChange(log, 'distanceKm', v) }} onBlur={() => { handleBlur(log.id) }} inputMode="decimal"
           />
-          {/* mm:ss, like every other duration in the app — `DurationField`
-              commits on blur, which is where this editor already flushes. */}
           <DurationField
             id={`past-run-duration-${log.id}`} label="Duration" valueSec={log.durationSec}
             onCommit={(v) => { handleRunChange(log, 'durationSec', v); handleBlur(log.id) }}
@@ -201,7 +273,7 @@ export const PastRecordEditor: FC<PastRecordEditorProps> = ({ instanceId }) => {
         </div>
       ))}
 
-      {stationLogs.map((log) => (
+      {orphans.stations.map((log) => (
         <div key={log.id} className="past-record-editor__row">
           <span className="past-record-editor__set-index">{log.station}</span>
           <NumberField

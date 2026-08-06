@@ -1,5 +1,5 @@
 import type { FC } from 'react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { InstancePrescription, IntervalSplit, RunLog } from '@/data/types'
 import { saveRunLog } from '@/data/repositories'
 import { paceSecPerKm } from '@/domain/pace/pace'
@@ -63,16 +63,25 @@ interface PastIntervalRunProps {
 export const PastIntervalRun: FC<PastIntervalRunProps> = ({ prescription, exerciseName, log, splits, onError }) => {
   const [drafts, setDrafts] = useState<DraftSplit[]>([])
   const autosave = useAutosave()
+  /**
+   * `IntervalSplitsEditor` reports its rows once on mount, before the athlete has
+   * touched anything. That echo must not write: on a session that already has a
+   * record it would rewrite frozen history identically just for opening the
+   * editor, and on one that has none it could create a row nobody asked for.
+   * Skipping exactly the first call is what makes opening this screen a read.
+   */
+  const seenMountEcho = useRef(false)
   const runLogId = log?.id ?? `rl_${prescription.id}`
   const totals = drafts.length > 0 ? intervalTotals(drafts) : { distanceKm: log?.distanceKm ?? null, durationSec: log?.durationSec ?? null }
 
   function handleSplitsChange(next: DraftSplit[]): void {
     setDrafts(next)
+    if (!seenMountEcho.current) {
+      seenMountEcho.current = true
+      return
+    }
     const merged = intervalTotals(next)
-    // `IntervalSplitsEditor` fires once on mount before the athlete touches
-    // anything. Writing then would stamp a fresh `loggedAt` onto history — or
-    // worse, write a row for a session that never had one — purely for opening
-    // the editor. Only a genuinely loggable set of reps gets through.
+    // Half-entered reps are still refused rather than saved as a zero.
     if (!isLoggableRun(merged.distanceKm, merged.durationSec)) return
 
     autosave.schedule(runLogId, async () => {
