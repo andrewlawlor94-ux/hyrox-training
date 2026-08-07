@@ -75,8 +75,13 @@ export const RunBlock: FC<{ item: RunExerciseVM }> = ({ item }) => {
    * boxes — see `intervalTotals`. Either the program prescribed intervals, or a
    * previously-saved log already has splits. */
   const isIntervalSession = prescription.intervalSpec !== undefined || splits.length > 0
-  const liveTotals = isIntervalSession ? intervalTotals(draftSplits) : { distanceKm, durationSec }
-  const livePace = paceSecPerKm(liveTotals.distanceKm ?? 0, liveTotals.durationSec ?? 0)
+  const liveTotals = isIntervalSession
+    ? intervalTotals(draftSplits)
+    : { distanceKm, durationSec, workPaceSecPerKm: null }
+  // The headline pace for an interval session is its WORK pace. Session time
+  // over work distance charges the recoveries against the reps and reads far
+  // slower than anything that was actually run.
+  const livePace = liveTotals.workPaceSecPerKm ?? paceSecPerKm(liveTotals.distanceKm ?? 0, liveTotals.durationSec ?? 0)
   const runLogId = log?.id ?? `rl_${prescription.id}`
 
   function scheduleSave(
@@ -94,6 +99,9 @@ export const RunBlock: FC<{ item: RunExerciseVM }> = ({ item }) => {
       : {
         distanceKm: patch.distanceKm !== undefined ? patch.distanceKm : distanceKm,
         durationSec: patch.durationSec !== undefined ? patch.durationSec : durationSec,
+        // A steady run has no reps to average, so its pace is simply its own
+        // distance over its own time — computed below like it always was.
+        workPaceSecPerKm: null,
       }
     const merged = {
       ...totals,
@@ -111,7 +119,9 @@ export const RunBlock: FC<{ item: RunExerciseVM }> = ({ item }) => {
         await deleteRunLog(runLogId, prescription.instanceId)
         return
       }
-      const pace = paceSecPerKm(merged.distanceKm as number, merged.durationSec as number)
+      // For an interval session the stored pace is the WORK-only mean, never
+      // session time over work distance — see `RunTotals.workPaceSecPerKm`.
+      const pace = merged.workPaceSecPerKm ?? paceSecPerKm(merged.distanceKm as number, merged.durationSec as number)
       const runLog: RunLog = {
         id: runLogId, instanceId: prescription.instanceId, instancePrescriptionId: prescription.id,
         distanceKm: merged.distanceKm as number, durationSec: merged.durationSec as number,

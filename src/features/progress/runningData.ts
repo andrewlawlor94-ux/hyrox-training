@@ -1,7 +1,8 @@
 import { db } from '@/data/db'
 import { listSymptomLogs, readSettings } from '@/data/repositories'
 import type {
-  Exercise, HyroxStandard, ISODate, InstancePrescription, RunLog, Station, WorkoutInstance, WorkoutTemplate,
+  Exercise, HyroxStandard, ISODate, InstancePrescription, IntervalSplit, RunLog, Station,
+  WorkoutInstance, WorkoutTemplate,
 } from '@/data/types'
 import { evaluateSymptoms } from '@/domain/symptoms/evaluate'
 import type { MilestoneFacts } from '@/domain/milestones/evaluate'
@@ -17,6 +18,10 @@ export interface RunningRawData {
   prescriptionsByInstanceId: Map<string, InstancePrescription[]>
   exercisesById: Map<string, Exercise>
   runLogs: RunLog[]
+  /** Every run's splits, keyed by run-log id. Carried because an interval
+   * session's pace is the mean across its WORK reps — a figure only the splits
+   * can give, and one the stored `paceSecPerKm` got wrong for a while. */
+  splitsByRunLogId: Map<string, IntervalSplit[]>
   facts: MilestoneFacts
 }
 
@@ -26,6 +31,16 @@ function buildTemplatesById(templates: WorkoutTemplate[]): Map<string, WorkoutTe
 
 function buildStandardsByStation(standards: HyroxStandard[]): Map<Station, HyroxStandard> {
   return new Map(standards.map((s) => [s.station, s]))
+}
+
+function groupSplits(splits: IntervalSplit[]): Map<string, IntervalSplit[]> {
+  const map = new Map<string, IntervalSplit[]>()
+  for (const split of splits) {
+    const list = map.get(split.runLogId) ?? []
+    list.push(split)
+    map.set(split.runLogId, list)
+  }
+  return map
 }
 
 function groupByInstanceId(prescriptions: InstancePrescription[]): Map<string, InstancePrescription[]> {
@@ -54,10 +69,11 @@ export async function loadRunningRawData(today: ISODate): Promise<RunningRawData
   const goal = (await db.raceGoals.filter((g) => g.isActive).first()) ?? (await db.raceGoals.get(plan.raceGoalId))
   if (!goal) return null
 
-  const [instances, templates, runLogs, stationLogs, standards, symptomLogs, exercises] = await Promise.all([
+  const [instances, templates, runLogs, intervalSplits, stationLogs, standards, symptomLogs, exercises] = await Promise.all([
     db.workoutInstances.where('planId').equals(plan.id).toArray(),
     db.workoutTemplates.where('planId').equals(plan.id).toArray(),
     db.runLogs.toArray(),
+    db.intervalSplits.toArray(),
     db.stationLogs.toArray(),
     db.hyroxStandards.toArray(),
     listSymptomLogs(),
@@ -94,6 +110,7 @@ export async function loadRunningRawData(today: ISODate): Promise<RunningRawData
     prescriptionsByInstanceId: groupByInstanceId(prescriptions),
     exercisesById: new Map(exercises.map((e): [string, Exercise] => [e.id, e])),
     runLogs,
+    splitsByRunLogId: groupSplits(intervalSplits),
     facts,
   }
 }

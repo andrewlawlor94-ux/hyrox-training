@@ -2,7 +2,6 @@ import type { FC } from 'react'
 import { useRef, useState } from 'react'
 import type { InstancePrescription, IntervalSplit, RunLog } from '@/data/types'
 import { saveRunLog } from '@/data/repositories'
-import { paceSecPerKm } from '@/domain/pace/pace'
 import { splitPaceSecPerKm } from '@/domain/pace/intervals'
 import { formatDistanceM, formatDuration, formatPace } from '@/domain/units/format'
 import { IntervalSplitsEditor } from '@/features/workout/IntervalSplitsEditor'
@@ -72,7 +71,9 @@ export const PastIntervalRun: FC<PastIntervalRunProps> = ({ prescription, exerci
    */
   const seenMountEcho = useRef(false)
   const runLogId = log?.id ?? `rl_${prescription.id}`
-  const totals = drafts.length > 0 ? intervalTotals(drafts) : { distanceKm: log?.distanceKm ?? null, durationSec: log?.durationSec ?? null }
+  const totals = drafts.length > 0
+    ? intervalTotals(drafts)
+    : { distanceKm: log?.distanceKm ?? null, durationSec: log?.durationSec ?? null, workPaceSecPerKm: log?.paceSecPerKm ?? null }
 
   function handleSplitsChange(next: DraftSplit[]): void {
     setDrafts(next)
@@ -86,7 +87,9 @@ export const PastIntervalRun: FC<PastIntervalRunProps> = ({ prescription, exerci
 
     autosave.schedule(runLogId, async () => {
       try {
-        const pace = paceSecPerKm(merged.distanceKm as number, merged.durationSec as number)
+        // The WORK-only mean, never session time over work distance — see
+        // `RunTotals.workPaceSecPerKm` for what that mistake produced.
+        const pace = merged.workPaceSecPerKm
         const runLog: RunLog = {
           id: runLogId,
           instanceId: prescription.instanceId,
@@ -114,7 +117,10 @@ export const PastIntervalRun: FC<PastIntervalRunProps> = ({ prescription, exerci
       <p className="past-interval-run__totals">
         {log === undefined
           ? 'Nothing was recorded for this run. Fill in the reps you did and they will be saved to this session.'
-          : `Recorded: ${totals.distanceKm === null ? '—' : formatDistanceM(totals.distanceKm * M_PER_KM)} · ${totals.durationSec === null ? '—' : formatDuration(totals.durationSec)} · ${formatPace(paceSecPerKm(totals.distanceKm ?? 0, totals.durationSec ?? 0))}`}
+          /* The pace shown is the WORK pace, matching what is stored — dividing
+             the session's elapsed time by the work distance reads far slower
+             than anything actually run. */
+          : `Recorded: ${totals.distanceKm === null ? '—' : formatDistanceM(totals.distanceKm * M_PER_KM)} · ${totals.durationSec === null ? '—' : formatDuration(totals.durationSec)} · ${formatPace(totals.workPaceSecPerKm)}`}
       </p>
       <IntervalSplitsEditor
         idPrefix={`past-run-${prescription.id}`}

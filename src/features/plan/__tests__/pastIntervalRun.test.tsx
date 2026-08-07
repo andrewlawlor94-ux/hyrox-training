@@ -130,9 +130,17 @@ describe('correcting a past interval run', () => {
     // themselves are unchanged and exact.
     await waitFor(async () => {
       const log = await db.runLogs.get(RUN_LOG_ID)
+      // The session's elapsed time, recovery included.
       expect(log?.durationSec).toBe(245 + 90 + 255)
-      // The stored pace follows the corrected reps rather than disagreeing with them.
-      expect(log?.paceSecPerKm).toBe((245 + 90 + 255) / 2)
+      /*
+       * The stored pace is the WORK mean — 4:05 and 4:15 over a kilometre each,
+       * so 250 s/km. This assertion previously expected 295, i.e. the whole
+       * session's 590 seconds divided by the 2 km of work: my own test writing
+       * down the very formula that reported the athlete's 6:17/km intervals as
+       * 9:32/km in Progress. Charging the recovery against the reps is not a
+       * slower pace, it is not a pace.
+       */
+      expect(log?.paceSecPerKm).toBe((245 + 255) / 2)
     }, { timeout: 5000 })
     // The original logging time is kept — this is a correction, not a new run.
     expect((await db.runLogs.get(RUN_LOG_ID))?.loggedAt).toBe(NOW)

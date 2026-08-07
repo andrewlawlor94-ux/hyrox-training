@@ -1,7 +1,8 @@
 import type {
-  Exercise, ISODate, InstancePrescription, RunLog, RunType, WorkoutInstance, WorkoutStatus,
+  Exercise, ISODate, InstancePrescription, IntervalSplit, RunLog, RunType, WorkoutInstance, WorkoutStatus,
 } from '@/data/types'
 import { paceSecPerKm } from '@/domain/pace/pace'
+import { summarizeSplits } from '@/domain/pace/intervals'
 import { goalTargets } from '@/domain/milestones/goalTargets'
 import type { GoalTargets } from '@/domain/milestones/goalTargets'
 import { evaluateMilestones } from '@/domain/milestones/evaluate'
@@ -169,7 +170,25 @@ export function buildWeeklyVolume(
   return [...rows.values()]
 }
 
-function runPace(log: RunLog): number | null {
+/**
+ * The pace that characterises one logged run.
+ *
+ * Derived from the SPLITS whenever a run has work reps, rather than trusted from
+ * the stored `paceSecPerKm` or divided out of the totals. An interval session's
+ * distance is its work distance while its duration is the whole session —
+ * warm-up, recoveries and cool-down included — so dividing one by the other
+ * charges all the standing around against the kilometres run at effort. That is
+ * what showed an athlete's 6:17/km intervals as 9:32/km here.
+ *
+ * Deriving it on READ rather than reading a stored number also repairs rows
+ * written while that was wrong, without rewriting anyone's history to do it.
+ */
+function runPace(log: RunLog, splitsByRunLogId: ReadonlyMap<string, IntervalSplit[]>): number | null {
+  const splits = splitsByRunLogId.get(log.id)
+  if (splits !== undefined && splits.length > 0) {
+    const workPace = summarizeSplits(splits).meanWorkPaceSecPerKm
+    if (workPace !== null) return workPace
+  }
   return log.paceSecPerKm ?? paceSecPerKm(log.distanceKm, log.durationSec)
 }
 
@@ -180,10 +199,13 @@ function sortByLoggedAt(runLogs: readonly RunLog[]): RunLog[] {
 /** Average pace grouped by `RunType`, at most one row per type actually
  * logged — never a fixed list of every possible type, so an athlete who has
  * never logged a `race` run never sees a fabricated zero row for it. */
-export function buildPaceByType(runLogs: readonly RunLog[]): PaceByTypeRow[] {
+export function buildPaceByType(
+  runLogs: readonly RunLog[],
+  splitsByRunLogId: ReadonlyMap<string, IntervalSplit[]>,
+): PaceByTypeRow[] {
   const byType = new Map<RunType, number[]>()
   for (const log of runLogs) {
-    const pace = runPace(log)
+    const pace = runPace(log, splitsByRunLogId)
     if (pace === null) continue
     const list = byType.get(log.runType) ?? []
     list.push(pace)
@@ -197,11 +219,14 @@ export function buildPaceByType(runLogs: readonly RunLog[]): PaceByTypeRow[] {
 }
 
 /** Easy-run pace over time, oldest first. */
-export function buildEasyRunPaceSeries(runLogs: readonly RunLog[]): EasyRunPacePoint[] {
+export function buildEasyRunPaceSeries(
+  runLogs: readonly RunLog[],
+  splitsByRunLogId: ReadonlyMap<string, IntervalSplit[]>,
+): EasyRunPacePoint[] {
   const points: EasyRunPacePoint[] = []
   for (const log of sortByLoggedAt(runLogs)) {
     if (log.runType !== 'easy') continue
-    const pace = runPace(log)
+    const pace = runPace(log, splitsByRunLogId)
     if (pace === null) continue
     points.push({ date: log.loggedAt.slice(0, ISO_DATE_LENGTH), paceSecPerKm: pace })
   }
@@ -232,8 +257,8 @@ export function buildRunningProgressVM(raw: RunningRawData): RunningProgressVM {
 
   return {
     weeklyVolume: buildWeeklyVolume(raw.instances, raw.prescriptionsByInstanceId, raw.exercisesById, raw.runLogs, raw.currentWeek),
-    paceByType: buildPaceByType(raw.runLogs),
-    easyRunPace: buildEasyRunPaceSeries(raw.runLogs),
+    paceByType: buildPaceByType(raw.runLogs, raw.splitsByRunLogId),
+    easyRunPace: buildEasyRunPaceSeries(raw.runLogs, raw.splitsByRunLogId),
     benchmarkHistory: buildBenchmarkHistory(raw.runLogs),
     milestones,
     trajectory,

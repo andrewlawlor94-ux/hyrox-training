@@ -2,6 +2,7 @@ import type { FC } from 'react'
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { formatPace } from '@/domain/units/format'
 import { ChartTable } from './ChartTable'
+import { paceTick, paceTooltipValue } from './paceAxis'
 import type { EasyRunPacePoint } from './runningViewModel'
 import { AXIS_TICK_FONT_SIZE, CHART_HEIGHT, CHART_MARGIN, Y_AXIS_WIDTH } from './constants'
 
@@ -10,7 +11,8 @@ interface EasyRunPaceChartProps {
 }
 
 /** Easy-run pace trend over time (§17) — the plan's own recovery-pace
- * barometer, distinct from the average-by-type comparison. */
+ * barometer, distinct from the average-by-type comparison. Reads in mm:ss for
+ * the same reason that one does: a pace is a duration, not a count of seconds. */
 export const EasyRunPaceChart: FC<EasyRunPaceChartProps> = ({ points }) => (
   <div className="chart-card">
     <h3>Easy-run pace trend</h3>
@@ -19,8 +21,8 @@ export const EasyRunPaceChart: FC<EasyRunPaceChartProps> = ({ points }) => (
         <LineChart data={points} margin={CHART_MARGIN}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis dataKey="date" tick={{ fontSize: AXIS_TICK_FONT_SIZE }} />
-          <YAxis tick={{ fontSize: AXIS_TICK_FONT_SIZE }} width={Y_AXIS_WIDTH} />
-          <Tooltip />
+          <YAxis tick={{ fontSize: AXIS_TICK_FONT_SIZE }} width={Y_AXIS_WIDTH} tickFormatter={paceTick} />
+          <Tooltip formatter={(value) => paceTooltipValue(value)} />
           <Line type="monotone" dataKey="paceSecPerKm" name="Easy-run pace" stroke="var(--accent)" strokeWidth={2} dot />
         </LineChart>
       </ResponsiveContainer>

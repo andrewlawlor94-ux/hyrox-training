@@ -24,8 +24,26 @@ export interface RunLog {
   id: string
   instanceId: string
   instancePrescriptionId?: string
+  /** Distance actually covered. For an interval session this is the WORK
+   * distance — a warm-up and cool-down logged as time carry no distance. */
   distanceKm: number
+  /** Whole-session elapsed time. For an interval session that includes the
+   * warm-up, the recoveries and the cool-down as well as the reps. */
   durationSec: number
+  /**
+   * The pace that characterises this run, and NOT simply
+   * `durationSec / distanceKm`.
+   *
+   * For an interval session it is the WORK-ONLY mean pace
+   * (`summarizeSplits().meanWorkPaceSecPerKm`), because dividing the whole
+   * session's elapsed time by the work distance is not a pace at all: it charges
+   * the recoveries, the warm-up and the cool-down against the kilometres run at
+   * effort. Doing exactly that reported an athlete's 6:17/km intervals as
+   * 9:32/km in Progress.
+   *
+   * For every other run type the two coincide, since there is nothing in the
+   * session that is not the run.
+   */
   paceSecPerKm?: number
   surface: Surface
   runType: RunType

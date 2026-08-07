@@ -7,6 +7,18 @@ const M_PER_KM = 1000
 export interface RunTotals {
   distanceKm: number | null
   durationSec: number | null
+  /**
+   * The pace to STORE for this session: the mean across its work reps only.
+   *
+   * Deliberately not `durationSec / distanceKm`. That divides the whole
+   * session's elapsed time — warm-up, recoveries and cool-down included — by the
+   * distance covered at effort, because only the work reps carry a distance at
+   * all. It is not a slower pace, it is not a pace: it reported a 6:17/km
+   * interval session as 9:32/km in Progress, which is what the athlete saw.
+   *
+   * `null` when no rep has both a distance and a time, so nothing is invented.
+   */
+  workPaceSecPerKm: number | null
 }
 
 /**
@@ -46,5 +58,6 @@ export function intervalTotals(drafts: readonly DraftSplit[]): RunTotals {
   return {
     distanceKm: summary.totalSessionDistanceM > 0 ? summary.totalSessionDistanceM / M_PER_KM : null,
     durationSec: summary.totalSessionDurationSec > 0 ? summary.totalSessionDurationSec : null,
+    workPaceSecPerKm: summary.meanWorkPaceSecPerKm,
   }
 }

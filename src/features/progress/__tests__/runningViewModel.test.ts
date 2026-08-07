@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { Exercise, InstancePrescription, WorkoutInstance } from '@/data/types'
-import { buildWeeklyVolume } from '../runningViewModel'
+import type { Exercise, InstancePrescription, IntervalSplit, RunLog, WorkoutInstance } from '@/data/types'
+import { buildEasyRunPaceSeries, buildPaceByType, buildWeeklyVolume } from '../runningViewModel'
 
 const NOW = '2026-01-05T08:00:00.000Z'
 
@@ -90,5 +90,74 @@ describe('buildWeeklyVolume — duration-prescribed sessions (Follow-up 2)', () 
     if (!week12) throw new Error('expected a week-12 row')
     expect(week12.plannedDurationSec).toBe(0)
     expect(week12.plannedKm).toBe(5)
+  })
+})
+
+/**
+ * The athlete's report: "progress tab is showing my intervals average pace is
+ * 572.5 seconds per km, but it should be 6 minutes and 17 seconds."
+ *
+ * An interval session's stored `distanceKm` is its WORK distance — a warm-up and
+ * cool-down logged as time carry no distance — while its `durationSec` is the
+ * whole session. Dividing one by the other charges every recovery, the warm-up
+ * and the cool-down against the kilometres actually run at effort. It is not a
+ * slower pace; it is not a pace.
+ */
+describe('pace by run type, for an interval session', () => {
+  const RUN_LOG_ID = 'rl_intervals'
+  const WORK_SEC = 377 // 6:17 per km, run four times over 1000 m
+
+  const intervalRun: RunLog = {
+    id: RUN_LOG_ID, instanceId: 'wi_1', runType: 'intervals',
+    // 4 km of work; 5:00 warm-up + 4 x 6:17 + 3 x 1:30 recovery + 5:00 cool-down.
+    distanceKm: 4, durationSec: 300 + WORK_SEC * 4 + 90 * 3 + 300,
+    surface: 'track', notes: '', loggedAt: NOW,
+  }
+
+  const splits: IntervalSplit[] = [
+    { id: 'sp0', runLogId: RUN_LOG_ID, index: 0, kind: 'warmup', durationSec: 300 },
+    { id: 'sp1', runLogId: RUN_LOG_ID, index: 1, kind: 'work', distanceM: 1000, durationSec: WORK_SEC },
+    { id: 'sp2', runLogId: RUN_LOG_ID, index: 2, kind: 'recovery', durationSec: 90 },
+    { id: 'sp3', runLogId: RUN_LOG_ID, index: 3, kind: 'work', distanceM: 1000, durationSec: WORK_SEC },
+    { id: 'sp4', runLogId: RUN_LOG_ID, index: 4, kind: 'recovery', durationSec: 90 },
+    { id: 'sp5', runLogId: RUN_LOG_ID, index: 5, kind: 'work', distanceM: 1000, durationSec: WORK_SEC },
+    { id: 'sp6', runLogId: RUN_LOG_ID, index: 6, kind: 'recovery', durationSec: 90 },
+    { id: 'sp7', runLogId: RUN_LOG_ID, index: 7, kind: 'work', distanceM: 1000, durationSec: WORK_SEC },
+    { id: 'sp8', runLogId: RUN_LOG_ID, index: 8, kind: 'cooldown', durationSec: 300 },
+  ]
+
+  it('reports the pace of the reps, not the whole session over the work distance', () => {
+    const rows = buildPaceByType([intervalRun], new Map([[RUN_LOG_ID, splits]]))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.meanPaceSecPerKm).toBe(WORK_SEC)
+    // What it used to report: every recovery, the warm-up and the cool-down
+    // divided across the four kilometres run at effort.
+    expect(rows[0]?.meanPaceSecPerKm).not.toBe(intervalRun.durationSec / intervalRun.distanceKm)
+  })
+
+  /** Written while the bug was live, so the stored number is wrong. Deriving on
+   * read repairs those rows without rewriting anyone's history. */
+  it('ignores a stored pace that disagrees with the reps it came from', () => {
+    const poisoned: RunLog = { ...intervalRun, paceSecPerKm: 572.5 }
+    const rows = buildPaceByType([poisoned], new Map([[RUN_LOG_ID, splits]]))
+    expect(rows[0]?.meanPaceSecPerKm).toBe(WORK_SEC)
+  })
+
+  it('still divides totals for a run with no splits, where that IS the pace', () => {
+    const easy: RunLog = {
+      id: 'rl_easy', instanceId: 'wi_2', runType: 'easy', distanceKm: 5, durationSec: 1800,
+      surface: 'road', notes: '', loggedAt: NOW,
+    }
+    const rows = buildPaceByType([easy], new Map())
+    expect(rows[0]?.meanPaceSecPerKm).toBe(360)
+  })
+
+  it('does not let an interval session poison the easy-run trend', () => {
+    const easy: RunLog = {
+      id: 'rl_easy', instanceId: 'wi_2', runType: 'easy', distanceKm: 5, durationSec: 1800,
+      surface: 'road', notes: '', loggedAt: NOW,
+    }
+    const points = buildEasyRunPaceSeries([intervalRun, easy], new Map([[RUN_LOG_ID, splits]]))
+    expect(points.map((p) => p.paceSecPerKm)).toEqual([360])
   })
 })
