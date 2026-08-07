@@ -44,11 +44,28 @@ interface DurationFieldProps {
 export const DurationField: FC<DurationFieldProps> = ({ id, label, valueSec, onCommit, hideLabel = false }) => {
   const [digits, setDigits] = useState(() => (valueSec === null ? '' : clockDigitsFrom(valueSec)))
   const isFocused = useRef(false)
+  /**
+   * The last `valueSec` this field has already accounted for, so the effect below
+   * reacts to a genuine CHANGE rather than to every run of itself.
+   *
+   * Without it the effect fired on mount too and reset `digits` from a `valueSec`
+   * the initial state had already been built from — pure noise, except when that
+   * run landed after the athlete's first keystroke, which wiped it. CI caught
+   * exactly that: typing `4` left the field empty instead of showing 0:04, every
+   * time, while a faster machine flushed the effect first and passed. The
+   * `isFocused` guard did not help, because a change event carries no focus of
+   * its own to guard on.
+   *
+   * Same `lastKnown*` pattern `SetRow` already uses to tell an external write
+   * apart from its own value echoing back.
+   */
+  const lastSeenValueSec = useRef(valueSec)
 
-  // Resync from the canonical value only while unfocused, so an external write
-  // can never rewrite what the athlete is mid-way through typing. Same
-  // focus-gated pattern as `NumberField`.
   useEffect(() => {
+    if (lastSeenValueSec.current === valueSec) return
+    lastSeenValueSec.current = valueSec
+    // An external write must not rewrite what the athlete is mid-way through
+    // typing. Same focus-gated pattern as `NumberField`.
     if (isFocused.current) return
     setDigits(valueSec === null ? '' : clockDigitsFrom(valueSec))
   }, [valueSec])

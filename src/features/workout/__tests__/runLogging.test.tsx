@@ -162,12 +162,15 @@ describe('run logging', () => {
     const instanceId = await createRunWorkout([{ exerciseId: 'ex_easy_run' }])
     await renderWorkout(instanceId)
 
-    // Re-queried each step rather than captured once: this screen's live query
-    // can resolve again between keystrokes, and a node held across that is a
-    // detached element whose `.value` no longer reflects what is rendered.
+    // This one failed on CI and passed here, which turned out to be a real defect
+    // rather than a timing artefact: `DurationField`'s resync effect ran on mount
+    // and reset the field from a value its initial state was already built from.
+    // On a slower runner that run landed AFTER the first keystroke and wiped it —
+    // "expected '' to be '0:04'". Fixed in the component; kept as the regression
+    // guard, and re-queried each step so a re-render between keystrokes cannot
+    // leave this holding a stale node either.
     for (const [typed, shown] of [['4', '0:04'], ['45', '0:45'], ['453', '4:53'], ['4530', '45:30']] as const) {
-      const field = screen.getByLabelText<HTMLInputElement>(/duration/i)
-      fireEvent.change(field, { target: { value: typed } })
+      fireEvent.change(screen.getByLabelText<HTMLInputElement>(/duration/i), { target: { value: typed } })
       expect(screen.getByLabelText<HTMLInputElement>(/duration/i).value, typed).toBe(shown)
     }
 
