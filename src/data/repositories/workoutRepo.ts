@@ -134,8 +134,17 @@ export async function applySubstitution(
     // reduction, never an increase, since the whole point is easing load.
     const factor = args.factor ?? IMPACT_REDUCTION_FACTOR
     for (const p of prescriptions) {
-      if (p.distanceM === undefined) continue
-      await db.instancePrescriptions.put({ ...p, distanceM: Math.round(p.distanceM * factor) })
+      // Distance AND duration. Scaling only `distanceM` meant "cut impact
+      // volume" did nothing at all to a duration-prescribed session — a 40
+      // minute easy run is the plan's commonest running session, and accepting
+      // the suggestion against a week of them changed not one thing while
+      // reporting success.
+      if (p.distanceM === undefined && p.durationSec === undefined) continue
+      await db.instancePrescriptions.put({
+        ...p,
+        ...(p.distanceM !== undefined ? { distanceM: Math.round(p.distanceM * factor) } : {}),
+        ...(p.durationSec !== undefined ? { durationSec: Math.round(p.durationSec * factor) } : {}),
+      })
     }
     return
   }

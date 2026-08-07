@@ -11,9 +11,9 @@ import {
   completeWorkoutEarlier, deferWorkout, listSymptomLogs, skipWorkout, syncQueue, updateSettings,
 } from '@/data/repositories'
 import { evaluateSymptoms } from '@/domain/symptoms/evaluate'
-import { suggestSubstitutions } from '@/domain/symptoms/substitutions'
+import { buildSymptomAdvice } from '@/domain/symptoms/substitutions'
 import { urgentRedFlagMessage } from '@/domain/symptoms/redFlags'
-import { affectedInstances } from '@/features/symptoms/affectedInstances'
+import { dismissalKey, sessionsForStream } from '@/features/symptoms/affectedInstances'
 import { SubstitutionCard } from '@/features/symptoms/SubstitutionCard'
 import { useHomeData } from './useHomeData'
 import { TodaysWorkoutCard } from './TodaysWorkoutCard'
@@ -100,8 +100,11 @@ export const HomeScreen: FC = () => {
 
   if (queue === undefined || settings === undefined) return <p className="home-screen__loading">Loading…</p>
 
-  const substitutions = symptomState ? suggestSubstitutions(symptomState) : []
-  const affected = affectedInstances(queue.instances, substitutions, settings.dismissedSubstitutions)
+  // At most one card per symptom stream, so two at the very most — this used
+  // to be one card per suggestion per affected session across the whole
+  // remaining plan, which ran to hundreds.
+  const advice = (symptomState ? buildSymptomAdvice(symptomState) : [])
+    .filter((entry) => !settings.dismissedSubstitutions.includes(dismissalKey(entry)))
 
   return (
     <div className="home-screen">
@@ -152,8 +155,12 @@ export const HomeScreen: FC = () => {
         onClose={() => { setPreviewInstanceId(null) }}
       />
 
-      {affected.map(({ instance, substitution }) => (
-        <SubstitutionCard key={`${instance.id}:${substitution.kind}`} instanceId={instance.id} substitution={substitution} />
+      {advice.map((entry) => (
+        <SubstitutionCard
+          key={entry.stream}
+          advice={entry}
+          sessions={sessionsForStream(queue.instances, entry.stream, today)}
+        />
       ))}
     </div>
   )
